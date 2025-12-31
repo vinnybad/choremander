@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "minor_version": 12,
+  "key": "core.device_registry",
+  "data": {
+    "devices": [
+      {"area_id":null,"config_entries":["01KEMYSHFSCENABW3QW2MSK3T8"],"config_entries_subentries":{"01KEMYSHFSCENABW3QW2MSK3T8":[null]},"configuration_url":null,"connections":[],"created_at":"2026-01-10T22:00:25.338863+00:00","disabled_by":null,"entry_type":"service","hw_version":null,"id":"3f8fb26ab6b9089b8d96f5ddb48c721d","identifiers":[["sun","01KEMYSHFSCENABW3QW2MSK3T8"]],"labels":[],"manufacturer":null,"model":null,"model_id":null,"modified_at":"2026-01-10T22:00:25.338888+00:00","name_by_user":null,"name":"Sun","primary_config_entry":"01KEMYSHFSCENABW3QW2MSK3T8","serial_number":null,"sw_version":null,"via_device_id":null},
+      {"area_id":null,"config_entries":["choremander_dev_entry"],"config_entries_subentries":{"choremander_dev_entry":[null]},"configuration_url":null,"connections":[],"created_at":"2026-01-10T22:00:25.429899+00:00","disabled_by":null,"entry_type":null,"hw_version":null,"id":"f2b73000869731282564b0323e9f4dfb","identifiers":[["choremander","choremander_dev_entry"]],"labels":[],"manufacturer":"Choremander","model":"Family Chore Manager","model_id":null,"modified_at":"2026-01-10T22:00:25.429918+00:00","name_by_user":null,"name":"Choremander","primary_config_entry":"choremander_dev_entry","serial_number":null,"sw_version":null,"via_device_id":null},
+      {"area_id":null,"config_entries":["01KEMYSJ7205QSRCW48X87E7GC"],"config_entries_subentries":{"01KEMYSJ7205QSRCW48X87E7GC":[null]},"configuration_url":"homeassistant://config/backup","connections":[],"created_at":"2026-01-10T22:00:26.094752+00:00","disabled_by":null,"entry_type":"service","hw_version":null,"id":"097d1248a630c999174d62c49fc1cfe2","identifiers":[["backup","backup_manager"]],"labels":[],"manufacturer":"Home Assistant","model":"Home Assistant Backup","model_id":null,"modified_at":"2026-01-10T22:00:26.094782+00:00","name_by_user":null,"name":"Backup","primary_config_entry":"01KEMYSJ7205QSRCW48X87E7GC","serial_number":null,"sw_version":"2026.1.0","via_device_id":null}
+    ],
+    "deleted_devices": []
+  }
+}

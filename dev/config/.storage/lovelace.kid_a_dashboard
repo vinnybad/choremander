@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "lovelace.kid_a_dashboard",
+  "data": {
+    "config": {
+      "title": "Krishna",
+      "views": [
+        {
+          "title": "Krishna",
+          "path": "default",
+          "cards": [
+            {
+              "type": "custom:choremander-child-card",
+              "entity": "sensor.choremander_overview",
+              "child_id": "child_krishna",
+              "time_category": "morning",
+              "title": "Morning Chores"
+            },
+            {
+              "type": "custom:choremander-child-card",
+              "entity": "sensor.choremander_overview",
+              "child_id": "child_krishna",
+              "time_category": "evening",
+              "title": "Evening Chores"
+            },
+            {
+              "type": "custom:choremander-rewards-card",
+              "entity": "sensor.choremander_overview",
+              "child_id": "child_krishna",
+              "title": "My Rewards"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

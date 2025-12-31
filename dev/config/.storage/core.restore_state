@@ -1,0 +1,260 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "core.restore_state",
+  "data": [
+    {
+      "state": {"entity_id":"conversation.home_assistant","state":"unknown","attributes":{"friendly_name":"Home Assistant","supported_features":1},"last_changed":"2026-01-10T22:20:06.691082+00:00","last_reported":"2026-01-10T22:20:06.691082+00:00","last_updated":"2026-01-10T22:20:06.691082+00:00","context":{"id":"01KEMZXK53XAX8ACJ9HPTXDDTK","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"event.backup_automatic_backup","state":"unknown","attributes":{"event_types":["completed","failed","in_progress"],"event_type":null,"friendly_name":"Backup Automatic backup"},"last_changed":"2026-01-10T22:20:06.709343+00:00","last_reported":"2026-01-10T22:20:06.709343+00:00","last_updated":"2026-01-10T22:20:06.709343+00:00","context":{"id":"01KEMZXK5NV83ZCDDPAA9JKEEF","parent_id":null,"user_id":null}},
+      "extra_data": {
+        "last_event_type": null,
+        "last_event_attributes": null
+      },
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_complete_make_bed","state":"unknown","attributes":{"child_id":"child_krishna","child_name":"Krishna","chore_id":"chore_bed","chore_name":"Make Bed","points":2,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Krishna: Complete Make Bed"},"last_changed":"2026-01-10T22:20:06.944514+00:00","last_reported":"2026-01-10T22:20:06.944514+00:00","last_updated":"2026-01-10T22:20:06.944514+00:00","context":{"id":"01KEMZXKD0DJKK3G2FDF4PDWXV","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_complete_brush_teeth_morning","state":"unknown","attributes":{"child_id":"child_krishna","child_name":"Krishna","chore_id":"chore_teeth_am","chore_name":"Brush Teeth (Morning)","points":1,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Krishna: Complete Brush Teeth (Morning)"},"last_changed":"2026-01-10T22:20:06.944592+00:00","last_reported":"2026-01-10T22:20:06.944592+00:00","last_updated":"2026-01-10T22:20:06.944592+00:00","context":{"id":"01KEMZXKD0Z27QZESNJDD321MC","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_complete_feed_the_dog","state":"unknown","attributes":{"child_id":"child_krishna","child_name":"Krishna","chore_id":"chore_feed_dog","chore_name":"Feed the Dog","points":3,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Krishna: Complete Feed the Dog"},"last_changed":"2026-01-10T22:20:06.944654+00:00","last_reported":"2026-01-10T22:20:06.944654+00:00","last_updated":"2026-01-10T22:20:06.944654+00:00","context":{"id":"01KEMZXKD07XZ21RDTTK27VXM1","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_complete_do_homework","state":"unknown","attributes":{"child_id":"child_krishna","child_name":"Krishna","chore_id":"chore_homework","chore_name":"Do Homework","points":5,"requires_approval":true,"icon":"mdi:check-circle","friendly_name":"Krishna: Complete Do Homework"},"last_changed":"2026-01-10T22:20:06.944705+00:00","last_reported":"2026-01-10T22:20:06.944705+00:00","last_updated":"2026-01-10T22:20:06.944705+00:00","context":{"id":"01KEMZXKD0N7VR25DEA1PWD452","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_complete_brush_teeth_evening","state":"unknown","attributes":{"child_id":"child_krishna","child_name":"Krishna","chore_id":"chore_teeth_pm","chore_name":"Brush Teeth (Evening)","points":1,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Krishna: Complete Brush Teeth (Evening)"},"last_changed":"2026-01-10T22:20:06.944755+00:00","last_reported":"2026-01-10T22:20:06.944755+00:00","last_updated":"2026-01-10T22:20:06.944755+00:00","context":{"id":"01KEMZXKD0YDNEA1SDA1YCB3S4","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_complete_tidy_room","state":"unknown","attributes":{"child_id":"child_krishna","child_name":"Krishna","chore_id":"chore_tidy_room","chore_name":"Tidy Room","points":3,"requires_approval":true,"icon":"mdi:check-circle","friendly_name":"Krishna: Complete Tidy Room"},"last_changed":"2026-01-10T22:20:06.944806+00:00","last_reported":"2026-01-10T22:20:06.944806+00:00","last_updated":"2026-01-10T22:20:06.944806+00:00","context":{"id":"01KEMZXKD03CWA9R7J6GEC6DZP","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_claim_30_min_screen_time","state":"unavailable","attributes":{"icon":"mdi:television","friendly_name":"Krishna: Claim 30 Min Screen Time"},"last_changed":"2026-01-10T22:20:06.945085+00:00","last_reported":"2026-01-10T22:20:06.945085+00:00","last_updated":"2026-01-10T22:20:06.945085+00:00","context":{"id":"01KEMZXKD15327XN4TMSQ14RQ2","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_claim_new_video_game","state":"unavailable","attributes":{"icon":"mdi:gamepad-variant","friendly_name":"Krishna: Claim New Video Game"},"last_changed":"2026-01-10T22:20:06.945225+00:00","last_reported":"2026-01-10T22:20:06.945225+00:00","last_updated":"2026-01-10T22:20:06.945225+00:00","context":{"id":"01KEMZXKD1H7T85AQJP8ZX2XHD","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_claim_new_book","state":"unavailable","attributes":{"icon":"mdi:book-open-variant","friendly_name":"Krishna: Claim New Book"},"last_changed":"2026-01-10T22:20:06.945484+00:00","last_reported":"2026-01-10T22:20:06.945484+00:00","last_updated":"2026-01-10T22:20:06.945484+00:00","context":{"id":"01KEMZXKD1QQN0NHX9YXY9WQTQ","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_claim_family_movie_night","state":"unavailable","attributes":{"icon":"mdi:movie-open","friendly_name":"Krishna: Claim Family Movie Night"},"last_changed":"2026-01-10T22:20:06.945685+00:00","last_reported":"2026-01-10T22:20:06.945685+00:00","last_updated":"2026-01-10T22:20:06.945685+00:00","context":{"id":"01KEMZXKD1VC9GBHKSYXK5NRTP","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_claim_trip_to_the_zoo","state":"unavailable","attributes":{"icon":"mdi:elephant","friendly_name":"Krishna: Claim Trip to the Zoo"},"last_changed":"2026-01-10T22:20:06.945904+00:00","last_reported":"2026-01-10T22:20:06.945904+00:00","last_updated":"2026-01-10T22:20:06.945904+00:00","context":{"id":"01KEMZXKD1NDKN69T87H2JMBX0","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_complete_make_bed","state":"unknown","attributes":{"child_id":"child_radha","child_name":"Radha","chore_id":"chore_bed","chore_name":"Make Bed","points":2,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Radha: Complete Make Bed"},"last_changed":"2026-01-10T22:20:06.946028+00:00","last_reported":"2026-01-10T22:20:06.946028+00:00","last_updated":"2026-01-10T22:20:06.946028+00:00","context":{"id":"01KEMZXKD29J075Z7JMZJPFQW8","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_complete_brush_teeth_morning","state":"unknown","attributes":{"child_id":"child_radha","child_name":"Radha","chore_id":"chore_teeth_am","chore_name":"Brush Teeth (Morning)","points":1,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Radha: Complete Brush Teeth (Morning)"},"last_changed":"2026-01-10T22:20:06.946096+00:00","last_reported":"2026-01-10T22:20:06.946096+00:00","last_updated":"2026-01-10T22:20:06.946096+00:00","context":{"id":"01KEMZXKD2Y6ZGERXQ3391QCQQ","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_complete_water_the_plants","state":"unknown","attributes":{"child_id":"child_radha","child_name":"Radha","chore_id":"chore_water_plants","chore_name":"Water the Plants","points":2,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Radha: Complete Water the Plants"},"last_changed":"2026-01-10T22:20:06.946148+00:00","last_reported":"2026-01-10T22:20:06.946148+00:00","last_updated":"2026-01-10T22:20:06.946148+00:00","context":{"id":"01KEMZXKD2W7EMDMT4S7SXJQYC","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_complete_practice_piano","state":"unknown","attributes":{"child_id":"child_radha","child_name":"Radha","chore_id":"chore_practice_piano","chore_name":"Practice Piano","points":4,"requires_approval":true,"icon":"mdi:check-circle","friendly_name":"Radha: Complete Practice Piano"},"last_changed":"2026-01-10T22:20:06.946199+00:00","last_reported":"2026-01-10T22:20:06.946199+00:00","last_updated":"2026-01-10T22:20:06.946199+00:00","context":{"id":"01KEMZXKD2YZANGSERCV376S85","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_complete_brush_teeth_evening","state":"unknown","attributes":{"child_id":"child_radha","child_name":"Radha","chore_id":"chore_teeth_pm","chore_name":"Brush Teeth (Evening)","points":1,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Radha: Complete Brush Teeth (Evening)"},"last_changed":"2026-01-10T22:20:06.946247+00:00","last_reported":"2026-01-10T22:20:06.946247+00:00","last_updated":"2026-01-10T22:20:06.946247+00:00","context":{"id":"01KEMZXKD2YX8BVY2V6RHG8VJF","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_complete_tidy_room","state":"unknown","attributes":{"child_id":"child_radha","child_name":"Radha","chore_id":"chore_tidy_room","chore_name":"Tidy Room","points":3,"requires_approval":true,"icon":"mdi:check-circle","friendly_name":"Radha: Complete Tidy Room"},"last_changed":"2026-01-10T22:20:06.947998+00:00","last_reported":"2026-01-10T22:20:06.947998+00:00","last_updated":"2026-01-10T22:20:06.947998+00:00","context":{"id":"01KEMZXKD32P5Y36RAWESETZZ7","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_claim_30_min_screen_time","state":"unavailable","attributes":{"icon":"mdi:television","friendly_name":"Radha: Claim 30 Min Screen Time"},"last_changed":"2026-01-10T22:20:06.948280+00:00","last_reported":"2026-01-10T22:20:06.948280+00:00","last_updated":"2026-01-10T22:20:06.948280+00:00","context":{"id":"01KEMZXKD4CWYYY5EQDXQ74A6T","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_claim_new_video_game","state":"unavailable","attributes":{"icon":"mdi:gamepad-variant","friendly_name":"Radha: Claim New Video Game"},"last_changed":"2026-01-10T22:20:06.948472+00:00","last_reported":"2026-01-10T22:20:06.948472+00:00","last_updated":"2026-01-10T22:20:06.948472+00:00","context":{"id":"01KEMZXKD42VFCQK889D6TXEJX","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_claim_new_book","state":"unavailable","attributes":{"icon":"mdi:book-open-variant","friendly_name":"Radha: Claim New Book"},"last_changed":"2026-01-10T22:20:06.948610+00:00","last_reported":"2026-01-10T22:20:06.948610+00:00","last_updated":"2026-01-10T22:20:06.948610+00:00","context":{"id":"01KEMZXKD4M0T4TKSRPBGGHYBB","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_claim_family_movie_night","state":"unavailable","attributes":{"icon":"mdi:movie-open","friendly_name":"Radha: Claim Family Movie Night"},"last_changed":"2026-01-10T22:20:06.948770+00:00","last_reported":"2026-01-10T22:20:06.948770+00:00","last_updated":"2026-01-10T22:20:06.948770+00:00","context":{"id":"01KEMZXKD4KHW8QWCXDB7DA14V","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_claim_trip_to_the_zoo","state":"unavailable","attributes":{"icon":"mdi:elephant","friendly_name":"Radha: Claim Trip to the Zoo"},"last_changed":"2026-01-10T22:20:06.949005+00:00","last_reported":"2026-01-10T22:20:06.949005+00:00","last_updated":"2026-01-10T22:20:06.949005+00:00","context":{"id":"01KEMZXKD5MPR6P9S6EA5YX5DK","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:20:07.809911+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_complete_put_away_breakfast_dishes","state":"unknown","attributes":{"child_id":"child_krishna","child_name":"Krishna","chore_id":"chore_breakfast_dishes","chore_name":"Put Away Breakfast Dishes","points":2,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Krishna: Complete Put Away Breakfast Dishes"},"last_changed":"2026-01-10T22:16:34.520035+00:00","last_reported":"2026-01-10T22:16:34.520035+00:00","last_updated":"2026-01-10T22:16:34.520035+00:00","context":{"id":"01KEMZQ3YRCC26X5B4AB6ZGKXX","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:17:03.492428+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_complete_help_with_dinner_dishes","state":"unknown","attributes":{"child_id":"child_krishna","child_name":"Krishna","chore_id":"chore_dinner_dishes","chore_name":"Help with Dinner Dishes","points":3,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Krishna: Complete Help with Dinner Dishes"},"last_changed":"2026-01-10T22:16:34.520117+00:00","last_reported":"2026-01-10T22:16:34.520117+00:00","last_updated":"2026-01-10T22:16:34.520117+00:00","context":{"id":"01KEMZQ3YR76WJFDXDVDXMS5M2","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:17:03.492428+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_claim_special_treat","state":"unknown","attributes":{"child_id":"child_krishna","child_name":"Krishna","reward_id":"reward_treat","reward_name":"Special Treat","cost":15,"override_cost":15,"is_dynamic":false,"child_points":25,"can_afford":true,"points_needed":0,"icon":"mdi:ice-cream","friendly_name":"Krishna: Claim Special Treat"},"last_changed":"2026-01-10T22:16:34.521103+00:00","last_reported":"2026-01-10T22:16:34.521103+00:00","last_updated":"2026-01-10T22:16:34.521103+00:00","context":{"id":"01KEMZQ3YSNVDEBJ33F9THEFCE","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:17:03.492428+00:00"
+    },
+    {
+      "state": {"entity_id":"button.krishna_claim_family_outing","state":"unavailable","attributes":{"icon":"mdi:ferris-wheel","friendly_name":"Krishna: Claim Family Outing"},"last_changed":"2026-01-10T22:16:34.521298+00:00","last_reported":"2026-01-10T22:16:34.521298+00:00","last_updated":"2026-01-10T22:16:34.521298+00:00","context":{"id":"01KEMZQ3YS9VNG5M92C8JK5R2S","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:17:03.492428+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_complete_put_away_breakfast_dishes","state":"unknown","attributes":{"child_id":"child_radha","child_name":"Radha","chore_id":"chore_breakfast_dishes","chore_name":"Put Away Breakfast Dishes","points":2,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Radha: Complete Put Away Breakfast Dishes"},"last_changed":"2026-01-10T22:16:34.521572+00:00","last_reported":"2026-01-10T22:16:34.521572+00:00","last_updated":"2026-01-10T22:16:34.521572+00:00","context":{"id":"01KEMZQ3YS3GVVA5SN2H929EDB","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:17:03.492428+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_complete_help_with_dinner_dishes","state":"unknown","attributes":{"child_id":"child_radha","child_name":"Radha","chore_id":"chore_dinner_dishes","chore_name":"Help with Dinner Dishes","points":3,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Radha: Complete Help with Dinner Dishes"},"last_changed":"2026-01-10T22:16:34.521650+00:00","last_reported":"2026-01-10T22:16:34.521650+00:00","last_updated":"2026-01-10T22:16:34.521650+00:00","context":{"id":"01KEMZQ3YS17FRHZP959N4AECS","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:17:03.492428+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_claim_special_treat","state":"unknown","attributes":{"child_id":"child_radha","child_name":"Radha","reward_id":"reward_treat","reward_name":"Special Treat","cost":15,"override_cost":15,"is_dynamic":false,"child_points":15,"can_afford":true,"points_needed":0,"icon":"mdi:ice-cream","friendly_name":"Radha: Claim Special Treat"},"last_changed":"2026-01-10T22:16:34.522485+00:00","last_reported":"2026-01-10T22:16:34.522485+00:00","last_updated":"2026-01-10T22:16:34.522485+00:00","context":{"id":"01KEMZQ3YTQS8DBB7RRV3AZGKJ","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:17:03.492428+00:00"
+    },
+    {
+      "state": {"entity_id":"button.radha_claim_family_outing","state":"unavailable","attributes":{"icon":"mdi:ferris-wheel","friendly_name":"Radha: Claim Family Outing"},"last_changed":"2026-01-10T22:16:34.522687+00:00","last_reported":"2026-01-10T22:16:34.522687+00:00","last_updated":"2026-01-10T22:16:34.522687+00:00","context":{"id":"01KEMZQ3YTM8CGWX0E15520M03","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:17:03.492428+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_a_complete_make_bed","state":"unknown","attributes":{"child_id":"child_a","child_name":"Kid A","chore_id":"chore_bed","chore_name":"Make Bed","points":2,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Kid A: Complete Make Bed"},"last_changed":"2026-01-10T22:14:54.145821+00:00","last_reported":"2026-01-10T22:14:54.145821+00:00","last_updated":"2026-01-10T22:14:54.145821+00:00","context":{"id":"01KEMZM1Y1YZNFBJGJ3WTZN454","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_a_complete_brush_teeth_morning","state":"unknown","attributes":{"child_id":"child_a","child_name":"Kid A","chore_id":"chore_teeth_am","chore_name":"Brush Teeth (Morning)","points":1,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Kid A: Complete Brush Teeth (Morning)"},"last_changed":"2026-01-10T22:14:54.145925+00:00","last_reported":"2026-01-10T22:14:54.145925+00:00","last_updated":"2026-01-10T22:14:54.145925+00:00","context":{"id":"01KEMZM1Y1W62GH3BKVN37FBGB","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_a_complete_put_away_breakfast_dishes","state":"unknown","attributes":{"child_id":"child_a","child_name":"Kid A","chore_id":"chore_breakfast_dishes","chore_name":"Put Away Breakfast Dishes","points":2,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Kid A: Complete Put Away Breakfast Dishes"},"last_changed":"2026-01-10T22:14:54.146012+00:00","last_reported":"2026-01-10T22:14:54.146012+00:00","last_updated":"2026-01-10T22:14:54.146012+00:00","context":{"id":"01KEMZM1Y2ERBJZC9NBH1S9NHV","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_a_complete_help_with_dinner_dishes","state":"unknown","attributes":{"child_id":"child_a","child_name":"Kid A","chore_id":"chore_dinner_dishes","chore_name":"Help with Dinner Dishes","points":3,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Kid A: Complete Help with Dinner Dishes"},"last_changed":"2026-01-10T22:14:54.146100+00:00","last_reported":"2026-01-10T22:14:54.146100+00:00","last_updated":"2026-01-10T22:14:54.146100+00:00","context":{"id":"01KEMZM1Y22WKRHSHWGBZKKPPX","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_a_complete_brush_teeth_evening","state":"unknown","attributes":{"child_id":"child_a","child_name":"Kid A","chore_id":"chore_teeth_pm","chore_name":"Brush Teeth (Evening)","points":1,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Kid A: Complete Brush Teeth (Evening)"},"last_changed":"2026-01-10T22:14:54.146180+00:00","last_reported":"2026-01-10T22:14:54.146180+00:00","last_updated":"2026-01-10T22:14:54.146180+00:00","context":{"id":"01KEMZM1Y2JZZHHGW1SCQM77EK","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_a_complete_tidy_room","state":"unknown","attributes":{"child_id":"child_a","child_name":"Kid A","chore_id":"chore_tidy_room","chore_name":"Tidy Room","points":3,"requires_approval":true,"icon":"mdi:check-circle","friendly_name":"Kid A: Complete Tidy Room"},"last_changed":"2026-01-10T22:14:54.146260+00:00","last_reported":"2026-01-10T22:14:54.146260+00:00","last_updated":"2026-01-10T22:14:54.146260+00:00","context":{"id":"01KEMZM1Y239ZCEFKT6DM18VAT","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_a_claim_30_min_screen_time","state":"unknown","attributes":{"child_id":"child_a","child_name":"Kid A","reward_id":"reward_screen","reward_name":"30 Min Screen Time","cost":10,"override_cost":10,"is_dynamic":false,"child_points":25,"can_afford":true,"points_needed":0,"icon":"mdi:television","friendly_name":"Kid A: Claim 30 Min Screen Time"},"last_changed":"2026-01-10T22:14:54.146717+00:00","last_reported":"2026-01-10T22:14:54.146717+00:00","last_updated":"2026-01-10T22:14:54.146717+00:00","context":{"id":"01KEMZM1Y22AW1HKJXEXBF3267","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_a_claim_special_treat","state":"unknown","attributes":{"child_id":"child_a","child_name":"Kid A","reward_id":"reward_treat","reward_name":"Special Treat","cost":15,"override_cost":15,"is_dynamic":false,"child_points":25,"can_afford":true,"points_needed":0,"icon":"mdi:ice-cream","friendly_name":"Kid A: Claim Special Treat"},"last_changed":"2026-01-10T22:14:54.147063+00:00","last_reported":"2026-01-10T22:14:54.147063+00:00","last_updated":"2026-01-10T22:14:54.147063+00:00","context":{"id":"01KEMZM1Y35HWRN0AZD7QK6GHV","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_a_claim_family_outing","state":"unavailable","attributes":{"icon":"mdi:ferris-wheel","friendly_name":"Kid A: Claim Family Outing"},"last_changed":"2026-01-10T22:14:54.147239+00:00","last_reported":"2026-01-10T22:14:54.147239+00:00","last_updated":"2026-01-10T22:14:54.147239+00:00","context":{"id":"01KEMZM1Y3PP3GBGCFNM1SZZWR","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_b_complete_make_bed","state":"unknown","attributes":{"child_id":"child_b","child_name":"Kid B","chore_id":"chore_bed","chore_name":"Make Bed","points":2,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Kid B: Complete Make Bed"},"last_changed":"2026-01-10T22:14:54.147331+00:00","last_reported":"2026-01-10T22:14:54.147331+00:00","last_updated":"2026-01-10T22:14:54.147331+00:00","context":{"id":"01KEMZM1Y3VC7ZTVTMTHHYWQCK","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_b_complete_brush_teeth_morning","state":"unknown","attributes":{"child_id":"child_b","child_name":"Kid B","chore_id":"chore_teeth_am","chore_name":"Brush Teeth (Morning)","points":1,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Kid B: Complete Brush Teeth (Morning)"},"last_changed":"2026-01-10T22:14:54.147438+00:00","last_reported":"2026-01-10T22:14:54.147438+00:00","last_updated":"2026-01-10T22:14:54.147438+00:00","context":{"id":"01KEMZM1Y3KVVPPX8BDXKCZAPV","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_b_complete_put_away_breakfast_dishes","state":"unknown","attributes":{"child_id":"child_b","child_name":"Kid B","chore_id":"chore_breakfast_dishes","chore_name":"Put Away Breakfast Dishes","points":2,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Kid B: Complete Put Away Breakfast Dishes"},"last_changed":"2026-01-10T22:14:54.147519+00:00","last_reported":"2026-01-10T22:14:54.147519+00:00","last_updated":"2026-01-10T22:14:54.147519+00:00","context":{"id":"01KEMZM1Y3R66FHT9R4JPT626Q","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_b_complete_help_with_dinner_dishes","state":"unknown","attributes":{"child_id":"child_b","child_name":"Kid B","chore_id":"chore_dinner_dishes","chore_name":"Help with Dinner Dishes","points":3,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Kid B: Complete Help with Dinner Dishes"},"last_changed":"2026-01-10T22:14:54.147597+00:00","last_reported":"2026-01-10T22:14:54.147597+00:00","last_updated":"2026-01-10T22:14:54.147597+00:00","context":{"id":"01KEMZM1Y39019GK5W6BZYRKPD","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_b_complete_brush_teeth_evening","state":"unknown","attributes":{"child_id":"child_b","child_name":"Kid B","chore_id":"chore_teeth_pm","chore_name":"Brush Teeth (Evening)","points":1,"requires_approval":false,"icon":"mdi:check-circle","friendly_name":"Kid B: Complete Brush Teeth (Evening)"},"last_changed":"2026-01-10T22:14:54.147677+00:00","last_reported":"2026-01-10T22:14:54.147677+00:00","last_updated":"2026-01-10T22:14:54.147677+00:00","context":{"id":"01KEMZM1Y34Z5ZFCK4HAD6JW2C","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_b_complete_tidy_room","state":"unknown","attributes":{"child_id":"child_b","child_name":"Kid B","chore_id":"chore_tidy_room","chore_name":"Tidy Room","points":3,"requires_approval":true,"icon":"mdi:check-circle","friendly_name":"Kid B: Complete Tidy Room"},"last_changed":"2026-01-10T22:14:54.147755+00:00","last_reported":"2026-01-10T22:14:54.147755+00:00","last_updated":"2026-01-10T22:14:54.147755+00:00","context":{"id":"01KEMZM1Y3J33S2A5X65JZBK00","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_b_claim_30_min_screen_time","state":"unknown","attributes":{"child_id":"child_b","child_name":"Kid B","reward_id":"reward_screen","reward_name":"30 Min Screen Time","cost":10,"override_cost":10,"is_dynamic":false,"child_points":15,"can_afford":true,"points_needed":0,"icon":"mdi:television","friendly_name":"Kid B: Claim 30 Min Screen Time"},"last_changed":"2026-01-10T22:14:54.148229+00:00","last_reported":"2026-01-10T22:14:54.148229+00:00","last_updated":"2026-01-10T22:14:54.148229+00:00","context":{"id":"01KEMZM1Y4S5WJ5J7F2N6KFN5F","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_b_claim_special_treat","state":"unknown","attributes":{"child_id":"child_b","child_name":"Kid B","reward_id":"reward_treat","reward_name":"Special Treat","cost":15,"override_cost":15,"is_dynamic":false,"child_points":15,"can_afford":true,"points_needed":0,"icon":"mdi:ice-cream","friendly_name":"Kid B: Claim Special Treat"},"last_changed":"2026-01-10T22:14:54.148528+00:00","last_reported":"2026-01-10T22:14:54.148528+00:00","last_updated":"2026-01-10T22:14:54.148528+00:00","context":{"id":"01KEMZM1Y4HFFHPPCQVK02X9VM","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    },
+    {
+      "state": {"entity_id":"button.kid_b_claim_family_outing","state":"unavailable","attributes":{"icon":"mdi:ferris-wheel","friendly_name":"Kid B: Claim Family Outing"},"last_changed":"2026-01-10T22:14:54.148737+00:00","last_reported":"2026-01-10T22:14:54.148737+00:00","last_updated":"2026-01-10T22:14:54.148737+00:00","context":{"id":"01KEMZM1Y48VSB0WN36020GZE7","parent_id":null,"user_id":null}},
+      "extra_data": null,
+      "last_seen": "2026-01-10T22:15:22.187152+00:00"
+    }
+  ]
+}

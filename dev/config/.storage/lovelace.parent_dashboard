@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "lovelace.parent_dashboard",
+  "data": {
+    "config": {
+      "title": "Parent Dashboard",
+      "views": [
+        {
+          "title": "Parent",
+          "path": "default",
+          "cards": [
+            {
+              "type": "custom:choremander-approvals-card",
+              "entity": "sensor.choremander_overview",
+              "title": "Pending Approvals"
+            },
+            {
+              "type": "custom:choremander-points-card",
+              "entity": "sensor.choremander_overview",
+              "title": "Manage Points"
+            },
+            {
+              "type": "custom:choremander-reorder-card",
+              "entity": "sensor.choremander_overview",
+              "child_id": "child_krishna",
+              "title": "Reorder Krishna's Chores"
+            },
+            {
+              "type": "custom:choremander-reorder-card",
+              "entity": "sensor.choremander_overview",
+              "child_id": "child_radha",
+              "title": "Reorder Radha's Chores"
+            },
+            {
+              "type": "custom:choremander-rewards-card",
+              "entity": "sensor.choremander_overview",
+              "title": "All Rewards"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

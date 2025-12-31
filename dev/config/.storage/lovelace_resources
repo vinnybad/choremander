@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "lovelace_resources",
+  "data": {
+    "items": [
+      {
+        "id": "aa5f13cb68a046758d3afce3468090e3",
+        "url": "/choremander/choremander-child-card.js?v=1.0.0",
+        "type": "module"
+      },
+      {
+        "id": "48dc26704779491b840b30c54405448e",
+        "url": "/choremander/choremander-rewards-card.js?v=1.0.0",
+        "type": "module"
+      },
+      {
+        "id": "dd99836d1ee8480a9b066173161daeee",
+        "url": "/choremander/choremander-approvals-card.js?v=1.0.0",
+        "type": "module"
+      },
+      {
+        "id": "600caaceae7d4e6e8655c659984904ab",
+        "url": "/choremander/choremander-points-card.js?v=1.0.0",
+        "type": "module"
+      },
+      {
+        "id": "d4438ec5f6ca4b02b8599016cc24aba6",
+        "url": "/choremander/choremander-reorder-card.js?v=1.0.0",
+        "type": "module"
+      }
+    ]
+  }
+}

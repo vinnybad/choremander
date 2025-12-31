@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "lovelace_dashboards",
+  "data": {
+    "items": [
+      {
+        "id": "kid_a_dashboard",
+        "mode": "storage",
+        "require_admin": false,
+        "show_in_sidebar": true,
+        "icon": "mdi:account",
+        "title": "Krishna",
+        "url_path": "krishna"
+      },
+      {
+        "id": "kid_b_dashboard",
+        "mode": "storage",
+        "require_admin": false,
+        "show_in_sidebar": true,
+        "icon": "mdi:account",
+        "title": "Radha",
+        "url_path": "radha"
+      },
+      {
+        "id": "parent_dashboard",
+        "mode": "storage",
+        "require_admin": false,
+        "show_in_sidebar": true,
+        "icon": "mdi:shield-account",
+        "title": "Parent",
+        "url_path": "parent"
+      }
+    ]
+  }
+}

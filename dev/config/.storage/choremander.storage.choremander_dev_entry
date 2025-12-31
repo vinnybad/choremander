@@ -1,0 +1,163 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "choremander.storage.choremander_dev_entry",
+  "data": {
+    "children": [
+      {
+        "id": "child_krishna",
+        "name": "Krishna",
+        "points": 25,
+        "avatar": "mdi:account-circle"
+      },
+      {
+        "id": "child_radha",
+        "name": "Radha",
+        "points": 15,
+        "avatar": "mdi:account-circle"
+      }
+    ],
+    "chores": [
+      {
+        "id": "chore_bed",
+        "name": "Make Bed",
+        "points": 2,
+        "time_category": "morning",
+        "assigned_to": [],
+        "requires_approval": false,
+        "daily_limit": 1
+      },
+      {
+        "id": "chore_teeth_am",
+        "name": "Brush Teeth (Morning)",
+        "points": 1,
+        "time_category": "morning",
+        "assigned_to": [],
+        "requires_approval": false,
+        "daily_limit": 1
+      },
+      {
+        "id": "chore_feed_dog",
+        "name": "Feed the Dog",
+        "points": 3,
+        "time_category": "morning",
+        "assigned_to": [
+          "child_krishna"
+        ],
+        "requires_approval": false,
+        "daily_limit": 1
+      },
+      {
+        "id": "chore_water_plants",
+        "name": "Water the Plants",
+        "points": 2,
+        "time_category": "morning",
+        "assigned_to": [
+          "child_radha"
+        ],
+        "requires_approval": false,
+        "daily_limit": 1
+      },
+      {
+        "id": "chore_homework",
+        "name": "Do Homework",
+        "points": 5,
+        "time_category": "evening",
+        "assigned_to": [
+          "child_krishna"
+        ],
+        "requires_approval": true,
+        "daily_limit": 1
+      },
+      {
+        "id": "chore_practice_piano",
+        "name": "Practice Piano",
+        "points": 4,
+        "time_category": "evening",
+        "assigned_to": [
+          "child_radha"
+        ],
+        "requires_approval": true,
+        "daily_limit": 1
+      },
+      {
+        "id": "chore_teeth_pm",
+        "name": "Brush Teeth (Evening)",
+        "points": 1,
+        "time_category": "evening",
+        "assigned_to": [],
+        "requires_approval": false,
+        "daily_limit": 1
+      },
+      {
+        "id": "chore_tidy_room",
+        "name": "Tidy Room",
+        "points": 3,
+        "time_category": "evening",
+        "assigned_to": [],
+        "requires_approval": true,
+        "daily_limit": 1
+      }
+    ],
+    "rewards": [
+      {
+        "id": "reward_screen",
+        "name": "30 Min Screen Time",
+        "cost": 10,
+        "icon": "mdi:television",
+        "assigned_to": [],
+        "is_jackpot": false,
+        "override_point_value": false,
+        "days_to_goal": 7
+      },
+      {
+        "id": "reward_krishna_game",
+        "name": "New Video Game",
+        "cost": 50,
+        "icon": "mdi:gamepad-variant",
+        "assigned_to": [
+          "child_krishna"
+        ],
+        "is_jackpot": false,
+        "override_point_value": true
+      },
+      {
+        "id": "reward_radha_book",
+        "name": "New Book",
+        "cost": 30,
+        "icon": "mdi:book-open-variant",
+        "assigned_to": [
+          "child_radha"
+        ],
+        "is_jackpot": false,
+        "override_point_value": true
+      },
+      {
+        "id": "reward_movie_night",
+        "name": "Family Movie Night",
+        "cost": 75,
+        "icon": "mdi:movie-open",
+        "assigned_to": [],
+        "is_jackpot": true,
+        "override_point_value": false,
+        "days_to_goal": 14
+      },
+      {
+        "id": "reward_zoo_trip",
+        "name": "Trip to the Zoo",
+        "cost": 150,
+        "icon": "mdi:elephant",
+        "assigned_to": [],
+        "is_jackpot": true,
+        "override_point_value": false,
+        "days_to_goal": 30
+      }
+    ],
+    "completions": [],
+    "pending_completions": [],
+    "reward_claims": [],
+    "pending_reward_claims": [],
+    "points_name": "Stars",
+    "points_icon": "mdi:star"
+  }
+}

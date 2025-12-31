@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "lovelace.kid_b_dashboard",
+  "data": {
+    "config": {
+      "title": "Radha",
+      "views": [
+        {
+          "title": "Radha",
+          "path": "default",
+          "cards": [
+            {
+              "type": "custom:choremander-child-card",
+              "entity": "sensor.choremander_overview",
+              "child_id": "child_radha",
+              "time_category": "morning",
+              "title": "Morning Chores"
+            },
+            {
+              "type": "custom:choremander-child-card",
+              "entity": "sensor.choremander_overview",
+              "child_id": "child_radha",
+              "time_category": "evening",
+              "title": "Evening Chores"
+            },
+            {
+              "type": "custom:choremander-rewards-card",
+              "entity": "sensor.choremander_overview",
+              "child_id": "child_radha",
+              "title": "My Rewards"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
