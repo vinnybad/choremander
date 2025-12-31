@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update manifest version
+        run: |
+          version="${{ github.event.release.tag_name }}"
+          version="${version#v}"
+          jq --arg version "$version" '.version = $version' \
+            custom_components/choremander/manifest.json > tmp.json
+          mv tmp.json custom_components/choremander/manifest.json
+
+      - name: Create release zip
+        run: |
+          cd custom_components/choremander
+          zip -r ../../choremander.zip .
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v1
+        with:
+          files: choremander.zip
