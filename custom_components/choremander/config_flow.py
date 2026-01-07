@@ -79,7 +79,6 @@ class ChoremanderOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
         self._selected_child_id: str | None = None
         self._selected_chore_id: str | None = None
         self._selected_reward_id: str | None = None

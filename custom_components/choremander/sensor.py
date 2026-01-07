@@ -33,6 +33,9 @@ async def async_setup_entry(
 
     entities: list[SensorEntity] = []
 
+    # Track child IDs that have sensors created
+    tracked_child_ids: set[str] = set()
+
     # Add overall stats sensor
     entities.append(ChoremandorOverallStatsSensor(coordinator, entry))
 
@@ -40,6 +43,7 @@ async def async_setup_entry(
     for child in coordinator.data.get("children", []):
         entities.append(ChildPointsSensor(coordinator, entry, child))
         entities.append(ChildStatsSensor(coordinator, entry, child))
+        tracked_child_ids.add(child.id)
 
     # Add pending approvals sensor
     entities.append(PendingApprovalsSensor(coordinator, entry))
@@ -51,15 +55,12 @@ async def async_setup_entry(
     def async_add_child_sensors() -> None:
         """Add sensors for newly added children."""
         new_entities: list[SensorEntity] = []
-        existing_child_ids = {
-            e.child_id
-            for e in coordinator.hass.data[DOMAIN].get("child_sensors", [])
-        }
 
         for child in coordinator.data.get("children", []):
-            if child.id not in existing_child_ids:
+            if child.id not in tracked_child_ids:
                 new_entities.append(ChildPointsSensor(coordinator, entry, child))
                 new_entities.append(ChildStatsSensor(coordinator, entry, child))
+                tracked_child_ids.add(child.id)
 
         if new_entities:
             async_add_entities(new_entities)
