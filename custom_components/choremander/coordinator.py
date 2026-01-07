@@ -286,6 +286,42 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         _LOGGER.warning("CALC_COSTS: final result for %s = %s", reward.name, result)
         return result
 
+    def get_child_daily_points(self, reward: Reward) -> dict[str, float]:
+        """Get the daily expected points for each child assigned to a reward.
+
+        This is used to calculate weighted contributions for jackpot rewards.
+        Returns a dict mapping child_id to their daily expected points.
+        """
+        result: dict[str, float] = {}
+
+        all_children = self.storage.get_children()
+        all_chores = self.storage.get_chores()
+
+        # Determine which children are assigned to this reward
+        if reward.assigned_to:
+            assigned_children = [c for c in all_children if c.id in reward.assigned_to]
+        else:
+            assigned_children = all_children
+
+        if not assigned_children or not all_chores:
+            return result
+
+        for child in assigned_children:
+            daily_points = 0.0
+
+            for chore in all_chores:
+                # Check if this chore is assigned to this child
+                if chore.assigned_to and child.id not in chore.assigned_to:
+                    continue
+
+                completion_pct = chore.completion_percentage_per_month
+                daily_expected = chore.points * (completion_pct / 100)
+                daily_points += daily_expected
+
+            result[child.id] = daily_points
+
+        return result
+
     def calculate_dynamic_reward_cost(self, reward: Reward, child_id: str | None = None) -> int:
         """Calculate the dynamic cost of a reward.
 

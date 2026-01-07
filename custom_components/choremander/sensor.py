@@ -190,6 +190,14 @@ class ChoremandorOverallStatsSensor(ChoremandorBaseSensor):
                 assigned = r.assigned_to if isinstance(r.assigned_to, list) and r.assigned_to else [c.id for c in children]
                 calculated_costs = {child_id: r.cost for child_id in assigned}
 
+            # For jackpot rewards, get each child's daily expected points for weighted meter
+            child_daily_points = {}
+            if getattr(r, 'is_jackpot', False) and hasattr(self.coordinator, 'get_child_daily_points'):
+                try:
+                    child_daily_points = self.coordinator.get_child_daily_points(r)
+                except Exception as e:
+                    _LOGGER.error("SENSOR: Error getting daily points for %s: %s", r.name, e)
+
             rewards_list.append({
                 "id": r.id,
                 "name": r.name,
@@ -201,6 +209,7 @@ class ChoremandorOverallStatsSensor(ChoremandorBaseSensor):
                 "override_point_value": override_point_value,
                 "days_to_goal": days_to_goal,
                 "calculated_costs": calculated_costs,  # Dict of child_id -> cost
+                "child_daily_points": child_daily_points,  # Dict of child_id -> daily expected points (for weighted jackpot meter)
             })
 
         return {

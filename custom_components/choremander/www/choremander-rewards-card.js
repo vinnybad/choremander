@@ -4,8 +4,8 @@
  * Shows rewards in a vertical list with star cost, name, description, and progress gauges.
  * Supports regular rewards, Jackpot rewards, and Dynamic rewards (goal-based pricing).
  *
- * Version: 0.0.6
- * Last Updated: 2026-01-01
+ * Version: 0.0.7
+ * Last Updated: 2026-01-07
  */
 
 const LitElement = customElements.get("hui-masonry-view")
@@ -683,14 +683,37 @@ class ChoremanderRewardsCard extends LitElement {
     let childContributions = [];
 
     if (isJackpot) {
-      // Jackpot: sum stars from all assigned children
+      // Jackpot: calculate weighted contributions based on each child's expected share
+      const childDailyPoints = reward.child_daily_points || {};
+      const daysToGoal = reward.days_to_goal || 30;
+      const totalDailyPoints = Object.values(childDailyPoints).reduce((sum, dp) => sum + dp, 0);
+
       relevantChildren.forEach((child, index) => {
         const points = child.points || 0;
+        const dailyPoints = childDailyPoints[child.id] || 0;
+        const expectedContribution = dailyPoints * daysToGoal;
+
+        // Calculate weighted progress (0-100% of their expected share)
+        let weightedProgress = 0;
+        if (expectedContribution > 0) {
+          weightedProgress = Math.min((points / expectedContribution) * 100, 100);
+        }
+
+        // Their "share" of the total goal (what % of the jackpot they're responsible for)
+        let shareOfGoal = 0;
+        if (totalDailyPoints > 0) {
+          shareOfGoal = (dailyPoints / totalDailyPoints) * 100;
+        }
+
         currentStars += points;
         childContributions.push({
           name: child.name,
           points: points,
-          colorIndex: index % 6
+          colorIndex: index % 6,
+          expectedContribution: Math.round(expectedContribution),
+          weightedProgress: weightedProgress,
+          shareOfGoal: shareOfGoal,
+          dailyPoints: dailyPoints
         });
       });
     } else {
@@ -765,14 +788,8 @@ class ChoremanderRewardsCard extends LitElement {
   _getDisplayCost(reward, children) {
     const calculatedCosts = reward.calculated_costs || {};
 
-    console.log('_getDisplayCost called for:', reward.name);
-    console.log('  calculated_costs:', calculatedCosts);
-    console.log('  override_point_value:', reward.override_point_value);
-    console.log('  assigned_to:', reward.assigned_to);
-
     // If override_point_value is true, use manual cost
     if (reward.override_point_value) {
-      console.log('  -> Using override cost:', reward.cost);
       return reward.cost;
     }
 
@@ -791,39 +808,46 @@ class ChoremanderRewardsCard extends LitElement {
 
     // For non-jackpot without specific child filter, get the first relevant child's cost
     const assignedTo = reward.assigned_to || [];
-    console.log('  assignedTo.length:', assignedTo.length);
     if (assignedTo.length === 0) {
       // Available to all children - get first child's cost
       if (children.length > 0 && calculatedCosts[children[0].id]) {
-        const cost = calculatedCosts[children[0].id];
-        console.log('  -> Using first child cost:', cost);
-        return cost;
+        return calculatedCosts[children[0].id];
       }
     } else {
       // Get first assigned child's cost
       for (const childId of assignedTo) {
-        console.log('  Checking childId:', childId, '-> cost:', calculatedCosts[childId]);
         if (calculatedCosts[childId]) {
-          console.log('  -> Using assigned child cost:', calculatedCosts[childId]);
           return calculatedCosts[childId];
         }
       }
     }
 
     // Fallback to manual cost
-    console.log('  -> FALLBACK to manual cost:', reward.cost);
     return reward.cost;
   }
 
   _renderJackpotProgress(reward, childContributions, totalStars, pointsIcon, displayCost) {
     const cost = displayCost || reward.cost;
 
-    // Calculate segment widths based on each child's contribution relative to the cost
-    const segments = childContributions.map((contrib, index) => {
-      const segmentPercentage = Math.min((contrib.points / cost) * 100, 100);
+    // For weighted display: each child's segment shows their progress toward their expected share
+    // The meter shows how much of their "responsibility" each child has fulfilled
+    const hasWeightedData = childContributions.some(c => c.expectedContribution > 0);
+
+    // Calculate weighted segments - each segment width = (child's share of goal) * (their progress %)
+    // This way, if a child has 50% share and is at 100% progress, they fill 50% of the bar
+    const segments = childContributions.map((contrib) => {
+      let width = 0;
+      if (hasWeightedData && contrib.shareOfGoal > 0) {
+        // Weighted: segment width = share of goal * progress percentage
+        // e.g., 40% share at 50% progress = 20% of bar filled
+        width = (contrib.shareOfGoal / 100) * (contrib.weightedProgress / 100) * 100;
+      } else {
+        // Fallback: raw contribution relative to cost
+        width = Math.min((contrib.points / cost) * 100, 100);
+      }
       return {
         ...contrib,
-        width: segmentPercentage
+        width: width
       };
     });
 
@@ -834,7 +858,7 @@ class ChoremanderRewardsCard extends LitElement {
       <div class="progress-section">
         <div class="progress-bar-container">
           <div class="jackpot-progress-bar">
-            ${segments.map((seg, index) => html`
+            ${segments.map((seg) => html`
               <div class="jackpot-segment color-${seg.colorIndex}"
                    style="width: ${seg.width}%"></div>
             `)}
@@ -842,14 +866,14 @@ class ChoremanderRewardsCard extends LitElement {
           <span class="progress-text">${totalStars}/${cost} <ha-icon icon="${pointsIcon}" style="--mdc-icon-size: 14px;"></ha-icon></span>
         </div>
         <div class="jackpot-breakdown">
-          ${childContributions.map((contrib, index) => html`
-            <span class="jackpot-child-contribution">
+          ${childContributions.map((contrib) => html`
+            <span class="jackpot-child-contribution" title="${hasWeightedData ? `Expected: ${contrib.expectedContribution}, Progress: ${Math.round(contrib.weightedProgress)}%` : ''}">
               <span class="color-dot color-${contrib.colorIndex}"></span>
-              ${contrib.name}: ${contrib.points} <ha-icon icon="${pointsIcon}" style="--mdc-icon-size: 12px;"></ha-icon>
+              ${contrib.name}: ${hasWeightedData ? html`${Math.round(contrib.weightedProgress)}%` : html`${contrib.points} <ha-icon icon="${pointsIcon}" style="--mdc-icon-size: 12px;"></ha-icon>`}
             </span>
           `)}
           ${childContributions.length > 1 ? html`
-            <span class="jackpot-total">= ${totalStars} total</span>
+            <span class="jackpot-total">${totalStars}/${cost} total</span>
           ` : ''}
         </div>
       </div>
@@ -1029,7 +1053,7 @@ window.customCards.push({
 });
 
 console.info(
-  "%c CHOREMANDER-REWARDS-CARD %c v0.0.6 ",
+  "%c CHOREMANDER-REWARDS-CARD %c v0.0.7 ",
   "background: #9b59b6; color: white; font-weight: bold; border-radius: 4px 0 0 4px;",
   "background: #f1c40f; color: #333; font-weight: bold; border-radius: 0 4px 4px 0;"
 );
