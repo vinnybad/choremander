@@ -104,6 +104,18 @@ Not all chores are equal. Some are easy (brush teeth), others take effort (homew
 
 Cards auto-register when the integration loads. Just add them to your Lovelace dashboard - no manual resource configuration needed!
 
+### Adding Cards (Visual Editor)
+
+The easiest way to add Choremander cards:
+
+1. Edit your dashboard and click **Add Card**
+2. Search for the card (e.g., "choremander-child-card") or scroll to find it under "Custom"
+3. Alternatively, add a **Manual** card and enter the card type (e.g., `custom:choremander-child-card`)
+4. The card will show a configuration interface - enter `sensor.choremander_overview` in the entity field
+5. Fill in any additional options (child selection, time of day, etc.) and save
+
+> **Tip:** If the card shows an error after adding, click on it to open the configuration panel. This is normal - it just needs to be configured!
+
 ### YAML Mode Users
 
 If you use Lovelace in YAML mode, add these resources to your `configuration.yaml`:
@@ -147,21 +159,35 @@ Kid-friendly interface with big colorful buttons and celebration sounds. This is
   <img src="images/kidCard.png" alt="Kid Card" width="300">
 </p>
 
+**Visual Editor:** Add `custom:choremander-child-card`, then configure the entity (`sensor.choremander_overview`), select a child, and optionally filter by time of day.
+
+<details>
+<summary>YAML Example</summary>
+
 ```yaml
 type: custom:choremander-child-card
-child_entity: sensor.emma_points
-overview_entity: sensor.choremander_overview
+entity: sensor.choremander_overview
+child_id: a8c8376a
+time_category: morning  # Optional: morning, afternoon, evening, night, anytime
+title: My Chores        # Optional
 ```
+</details>
 
 #### Rewards Card
 
 Shows all available rewards with progress bars. Displays dynamic pricing indicators and jackpot status.
 
+**Visual Editor:** Add `custom:choremander-rewards-card`, configure the entity, and optionally filter to a specific child.
+
+<details>
+<summary>YAML Example</summary>
+
 ```yaml
 type: custom:choremander-rewards-card
-overview_entity: sensor.choremander_overview
+entity: sensor.choremander_overview
 child_id: 6ddfca70  # Optional: filter to specific child
 ```
+</details>
 
 ---
 
@@ -175,33 +201,51 @@ Review and approve (or reject) completed chores that require parent approval. Sh
   <img src="images/pendingApprovals.png" alt="Pending Approvals" width="400">
 </p>
 
+**Visual Editor:** Add `custom:choremander-approvals-card` and configure the entity.
+
+<details>
+<summary>YAML Example</summary>
+
 ```yaml
 type: custom:choremander-approvals-card
-overview_entity: sensor.choremander_overview
+entity: sensor.choremander_overview
 ```
+</details>
 
 #### Points Card
 
 Manually add bonus points (great job today!) or remove points (consequences). Useful for situations outside the normal chore flow.
 
+**Visual Editor:** Add `custom:choremander-points-card` and configure the entity.
+
+<details>
+<summary>YAML Example</summary>
+
 ```yaml
 type: custom:choremander-points-card
-overview_entity: sensor.choremander_overview
+entity: sensor.choremander_overview
 ```
+</details>
 
 #### Reorder Card
 
 Drag-and-drop interface to organize the order chores appear for each child. Customize the experience per kid.
 
+**Visual Editor:** Add `custom:choremander-reorder-card`, configure the entity, and select a child.
+
+<details>
+<summary>YAML Example</summary>
+
 ```yaml
 type: custom:choremander-reorder-card
-child_entity: sensor.emma_points
-overview_entity: sensor.choremander_overview
+entity: sensor.choremander_overview
+child_id: a8c8376a
 ```
+</details>
 
 ---
 
-> **Note:** All cards require `overview_entity: sensor.choremander_overview`. Child-specific cards also need `child_entity`.
+> **Note:** All cards require the `sensor.choremander_overview` entity. Child-specific cards also need a child selection.
 
 ---
 
