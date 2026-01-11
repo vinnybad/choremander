@@ -3,6 +3,7 @@
 # Dev environment - generated files
 dev/config/.storage/auth
 dev/config/.storage/auth_provider.homeassistant
+dev/config/.storage/core.restore_state
 dev/config/custom_components/
 dev/config/home-assistant_v2.db
 dev/config/home-assistant_v2.db-shm
