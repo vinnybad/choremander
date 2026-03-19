@@ -1,6 +1,7 @@
 """Frontend registration for Choremander custom cards."""
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Final
@@ -34,16 +35,15 @@ GLOBAL_MODULES: Final = [
 FRONTEND_REGISTERED: Final = "frontend_registered"
 
 
-def _get_version() -> str:
-    """Get version from manifest.json for cache busting."""
-    import json
-
+async def _async_get_version(hass: HomeAssistant) -> str:
+    """Get version from manifest.json for cache busting (async-safe)."""
     manifest_path = Path(__file__).parent / "manifest.json"
     try:
-        with open(manifest_path) as f:
-            manifest = json.load(f)
-            return manifest.get("version", "1.0.0")
-    except (FileNotFoundError, json.JSONDecodeError):
+        content = await hass.async_add_executor_job(
+            manifest_path.read_text, "utf-8"
+        )
+        return json.loads(content).get("version", "1.0.0")
+    except Exception:  # noqa: BLE001
         return "1.0.0"
 
 
@@ -68,7 +68,7 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
     _LOGGER.debug("Registered static path: %s -> %s", URL_BASE, www_path)
 
     # Register global JS modules (loaded on all pages, including config flow)
-    version = _get_version()
+    version = await _async_get_version(hass)
     for module in GLOBAL_MODULES:
         module_url = f"{URL_BASE}/{module}?v={version}"
         add_extra_js_url(hass, module_url)
@@ -79,8 +79,12 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
 
 
 async def async_register_cards(hass: HomeAssistant) -> None:
-    """Register card resources with Lovelace automatically."""
-    version = _get_version()
+    """Register card resources with Lovelace automatically.
+
+    Only adds missing Choremander resources. Never modifies or removes
+    existing resources, including those from other integrations.
+    """
+    version = await _async_get_version(hass)
 
     lovelace_data = hass.data.get("lovelace")
     if lovelace_data is None:
@@ -99,40 +103,36 @@ async def async_register_cards(hass: HomeAssistant) -> None:
             _LOGGER.info("    type: module")
         return
 
-    # Storage mode - add resources automatically
+    # Storage mode - only ADD missing resources, never update or remove existing ones
     try:
         resources = lovelace_data.resources
         if resources is None:
             _LOGGER.debug("Lovelace resources collection not available")
             return
 
-        # Get existing resource URLs (strip query params for comparison)
-        existing_urls = set()
+        # Build set of existing Choremander resource base URLs only
+        # (strip query params for comparison)
+        existing_choremander_urls = set()
         for item in resources.async_items():
             url = item.get("url", "")
-            existing_urls.add(url.split("?")[0])
+            base_url = url.split("?")[0]
+            # Only track our own resources to avoid touching others
+            if base_url.startswith(URL_BASE + "/"):
+                existing_choremander_urls.add(base_url)
 
-        # Register each card
+        # Only add cards that are completely missing — never update existing entries
+        # This prevents any risk of corrupting or removing other resources
         for card in CARDS:
             card_url = f"{URL_BASE}/{card}"
             versioned_url = f"{card_url}?v={version}"
 
-            if card_url in existing_urls:
-                # Update version if needed
-                for item in resources.async_items():
-                    if item.get("url", "").split("?")[0] == card_url:
-                        if item.get("url") != versioned_url:
-                            await resources.async_update_item(
-                                item["id"],
-                                {"url": versioned_url},
-                            )
-                            _LOGGER.debug("Updated card version: %s", versioned_url)
-                        break
-            else:
+            if card_url not in existing_choremander_urls:
                 await resources.async_create_item(
                     {"url": versioned_url, "res_type": "module"}
                 )
                 _LOGGER.info("Registered Lovelace resource: %s", versioned_url)
+            else:
+                _LOGGER.debug("Resource already registered: %s", card_url)
 
     except Exception as err:  # noqa: BLE001
         _LOGGER.warning(
