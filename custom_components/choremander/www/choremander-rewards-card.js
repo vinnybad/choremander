@@ -20,7 +20,20 @@ class ChoremanderRewardsCard extends LitElement {
     return {
       hass: { type: Object },
       config: { type: Object },
+      _pendingReward: { type: Object },
+      _loading: { type: Object },
+      _celebrating: { type: Object },
+      _confetti: { type: Array },
     };
+  }
+
+  constructor() {
+    super();
+    this._pendingReward = null;
+    this._loading = {};
+    this._celebrating = null;
+    this._confetti = [];
+    this._audioContext = null;
   }
 
   static get styles() {
@@ -249,6 +262,22 @@ class ChoremanderRewardsCard extends LitElement {
         text-align: right;
       }
 
+      .shortfall-label {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+        opacity: 0.75;
+        margin-top: 2px;
+      }
+
+      .shortfall-label ha-icon {
+        --mdc-icon-size: 13px;
+        color: var(--reward-gold-dark);
+      }
+
       /* Jackpot reward styles */
       .reward-row.jackpot {
         border: 2px solid var(--reward-gold);
@@ -453,6 +482,16 @@ class ChoremanderRewardsCard extends LitElement {
         color: white;
       }
 
+      .reward-icon-container.loading {
+        opacity: 0.7;
+        pointer-events: none;
+      }
+
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
       /* Empty state */
       .empty-state {
         display: flex;
@@ -549,6 +588,228 @@ class ChoremanderRewardsCard extends LitElement {
           --mdc-icon-size: 20px;
         }
       }
+
+      /* Celebration overlay */
+      .celebration-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        animation: fade-in 0.3s ease;
+      }
+
+      @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      .celebration-content {
+        background: white;
+        border-radius: 30px;
+        padding: 40px 50px;
+        text-align: center;
+        animation: pop-in 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        position: relative;
+        overflow: hidden;
+      }
+
+      @keyframes pop-in {
+        from { transform: scale(0); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }
+
+      .celebration-stars {
+        font-size: 4rem;
+        margin-bottom: 16px;
+        animation: star-bounce 0.6s ease infinite;
+      }
+
+      @keyframes star-bounce {
+        0%, 100% { transform: scale(1) rotate(0deg); }
+        50% { transform: scale(1.2) rotate(10deg); }
+      }
+
+      .celebration-title {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: var(--reward-purple);
+        margin-bottom: 8px;
+      }
+
+      .celebration-message {
+        font-size: 1.3rem;
+        color: #666;
+        margin-bottom: 16px;
+      }
+
+      .celebration-points {
+        font-size: 1.8rem;
+        font-weight: bold;
+        color: var(--reward-gold-dark);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+
+      .celebration-points ha-icon {
+        --mdc-icon-size: 28px;
+        color: var(--reward-gold);
+      }
+
+      /* Confetti */
+      .confetti-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 10000;
+        overflow: hidden;
+      }
+
+      .confetti {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        animation: confetti-fall 3s linear forwards;
+      }
+
+      @keyframes confetti-fall {
+        0% { transform: translateY(-100px) rotate(0deg); opacity: 1; }
+        100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+      }
+
+      /* Confirmation dialog */
+      .confirm-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      }
+
+      .confirm-dialog {
+        background: var(--card-background-color, #fff);
+        border-radius: 16px;
+        padding: 24px;
+        max-width: 320px;
+        width: 90%;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .confirm-dialog .dialog-icon {
+        display: flex;
+        justify-content: center;
+        --mdc-icon-size: 48px;
+        color: var(--reward-purple);
+      }
+
+      .confirm-dialog .dialog-title {
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: var(--primary-text-color);
+        text-align: center;
+      }
+
+      .confirm-dialog .dialog-body {
+        font-size: 0.9rem;
+        color: var(--secondary-text-color);
+        text-align: center;
+        line-height: 1.5;
+      }
+
+      .confirm-dialog .dialog-buttons {
+        display: flex;
+        gap: 10px;
+      }
+
+      .confirm-dialog button {
+        flex: 1;
+        padding: 10px;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      .confirm-dialog button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+
+      .confirm-dialog button:active {
+        transform: scale(0.97);
+      }
+
+      .confirm-dialog .btn-cancel {
+        background: var(--secondary-background-color, #f5f5f5);
+        color: var(--primary-text-color);
+      }
+
+      .confirm-dialog .btn-confirm {
+        background: linear-gradient(135deg, var(--reward-purple) 0%, var(--reward-purple-light) 100%);
+        color: white;
+      }
+
+      .dialog-points-summary {
+        background: var(--secondary-background-color, #f5f5f5);
+        border-radius: 8px;
+        padding: 10px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 0.9rem;
+      }
+
+      .dialog-points-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: var(--primary-text-color);
+      }
+
+      .dialog-points-row.cost {
+        color: var(--secondary-text-color);
+        border-top: 1px solid var(--divider-color, #e0e0e0);
+        padding-top: 6px;
+      }
+
+      .dialog-points-row.remaining {
+        font-weight: 700;
+        border-top: 1px solid var(--divider-color, #e0e0e0);
+        padding-top: 6px;
+        color: var(--reward-purple);
+      }
+
+      .points-val {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-weight: 600;
+      }
+
+      .points-val.cost {
+        color: #e74c3c;
+      }
+
+      .points-val.remaining {
+        color: var(--reward-purple);
+      }
     `;
   }
 
@@ -599,6 +860,17 @@ class ChoremanderRewardsCard extends LitElement {
       `;
     }
 
+    if (entity.state === "unavailable" || entity.state === "unknown") {
+      return html`
+        <ha-card>
+          <div class="error-state">
+            <ha-icon icon="mdi:alert-circle"></ha-icon>
+            <div>Choremander is unavailable</div>
+          </div>
+        </ha-card>
+      `;
+    }
+
     const allRewards = entity.attributes.rewards || [];
     const children = entity.attributes.children || [];
     const pointsIcon = entity.attributes.points_icon || "mdi:star";
@@ -615,13 +887,31 @@ class ChoremanderRewardsCard extends LitElement {
     }
 
     // Sort rewards: jackpot first, then by calculated cost ascending within each group
+    // Pre-compute affordability for sorting
+    const childPoints = this.config.child_id
+      ? (children.find(c => c.id === this.config.child_id)?.points || 0)
+      : (children[0]?.points || 0);
+
     const sortedRewards = [...rewards].sort((a, b) => {
-      // Jackpot rewards come first
-      if (a.is_jackpot && !b.is_jackpot) return -1;
-      if (!a.is_jackpot && b.is_jackpot) return 1;
-      // Within same type, sort by calculated cost ascending
       const aCost = this._getDisplayCost(a, children);
       const bCost = this._getDisplayCost(b, children);
+      const aAffordable = childPoints >= aCost;
+      const bAffordable = childPoints >= bCost;
+
+      // Affordable rewards come first
+      if (aAffordable && !bAffordable) return -1;
+      if (!aAffordable && bAffordable) return 1;
+
+      // Within affordable: jackpot first, then by cost ascending
+      if (aAffordable && bAffordable) {
+        if (a.is_jackpot && !b.is_jackpot) return -1;
+        if (!a.is_jackpot && b.is_jackpot) return 1;
+        return aCost - bCost;
+      }
+
+      // Within unaffordable: jackpot first, then by cost ascending
+      if (a.is_jackpot && !b.is_jackpot) return -1;
+      if (!a.is_jackpot && b.is_jackpot) return 1;
       return aCost - bCost;
     });
 
@@ -649,6 +939,63 @@ class ChoremanderRewardsCard extends LitElement {
             : sortedRewards.map((reward) => this._renderRewardRow(reward, pointsIcon, pointsName, childMap, children))}
         </div>
       </ha-card>
+
+      ${this._celebrating ? this._renderCelebration() : ""}
+      ${this._confetti.length > 0 ? this._renderConfetti() : ""}
+
+      ${this._pendingReward ? html`
+        <div class="confirm-overlay" @click="${this._cancelRedeem}">
+          <div class="confirm-dialog" @click="${(e) => e.stopPropagation()}">
+            <ha-icon class="dialog-icon" icon="mdi:gift-outline"></ha-icon>
+            <div class="dialog-title">Claim Reward?</div>
+            <div class="dialog-body">
+              ${(() => {
+                const entity = this.hass.states[this.config.entity];
+                const children = entity?.attributes?.children || [];
+                const pointsIcon = entity?.attributes?.points_icon || "mdi:star";
+                const pointsName = entity?.attributes?.points_name || "Stars";
+                const reward = this._pendingReward;
+                const child = this.config.child_id ? children.find(c => c.id === this.config.child_id) : null;
+                const currentPoints = child ? (child.points || 0) : null;
+                const cost = reward._displayCost !== undefined ? reward._displayCost : reward.cost;
+                const remaining = currentPoints !== null ? currentPoints - cost : null;
+                return html`
+                  <div style="margin-bottom: 12px;">Claim <strong>${reward.name}</strong>?</div>
+                  ${currentPoints !== null ? html`
+                    <div class="dialog-points-summary">
+                      <div class="dialog-points-row">
+                        <span>Your ${pointsName}</span>
+                        <span class="points-val">
+                          <ha-icon icon="${pointsIcon}" style="--mdc-icon-size:14px;"></ha-icon>
+                          ${currentPoints}
+                        </span>
+                      </div>
+                      <div class="dialog-points-row cost">
+                        <span>Cost</span>
+                        <span class="points-val cost">
+                          <ha-icon icon="${pointsIcon}" style="--mdc-icon-size:14px;"></ha-icon>
+                          −${cost}
+                        </span>
+                      </div>
+                      <div class="dialog-points-row remaining">
+                        <span>Remaining</span>
+                        <span class="points-val remaining">
+                          <ha-icon icon="${pointsIcon}" style="--mdc-icon-size:14px;"></ha-icon>
+                          ${remaining}
+                        </span>
+                      </div>
+                    </div>
+                  ` : ''}
+                `;
+              })()}
+            </div>
+            <div class="dialog-buttons">
+              <button class="btn-cancel" @click="${this._cancelRedeem}">Cancel</button>
+              <button class="btn-confirm" @click="${this._confirmRedeem}">Claim!</button>
+            </div>
+          </div>
+        </div>
+      ` : ""}
     `;
   }
 
@@ -727,6 +1074,7 @@ class ChoremanderRewardsCard extends LitElement {
     }
 
     const percentage = Math.min((currentStars / displayCost) * 100, 100);
+    const canAfford = currentStars >= displayCost;
 
     return html`
       <div class="reward-row ${isJackpot ? 'jackpot' : ''} ${isDynamicPricing ? 'dynamic' : ''}">
@@ -745,7 +1093,7 @@ class ChoremanderRewardsCard extends LitElement {
 
           ${isJackpot
             ? this._renderJackpotProgress(reward, childContributions, currentStars, pointsIcon, displayCost)
-            : this._renderRegularProgress(currentStars, displayCost, percentage, pointsIcon)}
+            : this._renderRegularProgress(currentStars, displayCost, percentage, pointsIcon, canAfford)}
 
           ${showChildBadges && !isJackpot
             ? html`
@@ -760,14 +1108,25 @@ class ChoremanderRewardsCard extends LitElement {
               `
             : ""}
         </div>
-        <div class="reward-icon-container">
-          <ha-icon icon="${rewardIcon}"></ha-icon>
-        </div>
+        ${(() => {
+          const isLoading = this._loading[reward.id];
+          return html`
+            <div class="reward-icon-container ${canAfford ? 'can-afford' : 'cannot-afford'} ${isLoading ? 'loading' : ''}"
+              @click="${(canAfford && !isLoading) ? () => this._handleRedeem(reward, displayCost) : null}"
+              style="cursor: ${(canAfford && !isLoading) ? 'pointer' : 'default'}; opacity: ${canAfford ? '1' : '0.4'};"
+              title="${isLoading ? 'Claiming...' : canAfford ? 'Claim reward' : 'Not enough points'}">
+              ${isLoading
+                ? html`<ha-icon icon="mdi:loading" style="animation: spin 1s linear infinite; color: white;"></ha-icon>`
+                : html`<ha-icon icon="${rewardIcon}"></ha-icon>`}
+            </div>
+          `;
+        })()}
       </div>
     `;
   }
 
-  _renderRegularProgress(currentStars, cost, percentage, pointsIcon) {
+  _renderRegularProgress(currentStars, cost, percentage, pointsIcon, canAfford) {
+    const shortfall = cost - currentStars;
     return html`
       <div class="progress-section">
         <div class="progress-bar-container">
@@ -776,6 +1135,12 @@ class ChoremanderRewardsCard extends LitElement {
           </div>
           <span class="progress-text">${currentStars}/${cost} <ha-icon icon="${pointsIcon}" style="--mdc-icon-size: 14px;"></ha-icon></span>
         </div>
+        ${!canAfford ? html`
+          <div class="shortfall-label">
+            <ha-icon icon="${pointsIcon}" style="--mdc-icon-size: 13px;"></ha-icon>
+            ${shortfall} more needed
+          </div>
+        ` : ''}
       </div>
     `;
   }
@@ -824,6 +1189,148 @@ class ChoremanderRewardsCard extends LitElement {
 
     // Fallback to manual cost
     return reward.cost;
+  }
+
+  _handleRedeem(reward, displayCost) {
+    this._pendingReward = { ...reward, _displayCost: displayCost };
+  }
+
+  _cancelRedeem() {
+    this._pendingReward = null;
+  }
+
+  async _confirmRedeem() {
+    const reward = this._pendingReward;
+    this._pendingReward = null;
+    if (!this.hass || !reward) return;
+
+    this._loading = { ...this._loading, [reward.id]: true };
+    this.requestUpdate();
+
+    try {
+      await this.hass.callService("choremander", "claim_reward", {
+        reward_id: reward.id,
+        ...(this.config.child_id ? { child_id: this.config.child_id } : {}),
+      });
+
+      // Trigger celebration!
+      this._celebrating = reward;
+      this._spawnConfetti();
+      this._playFanfareSound();
+      this.requestUpdate();
+
+      setTimeout(() => {
+        this._celebrating = null;
+        this._confetti = [];
+        this.requestUpdate();
+      }, 3000);
+
+    } catch (error) {
+      console.error("Failed to claim reward:", error);
+      this.hass.callService("persistent_notification", "create", {
+        title: "Choremander Error",
+        message: `Failed to claim reward: ${error.message}`,
+        notification_id: `choremander_claim_error_${reward.id}`,
+      });
+    } finally {
+      this._loading = { ...this._loading, [reward.id]: false };
+      this.requestUpdate();
+    }
+  }
+
+  _spawnConfetti() {
+    const confetti = [];
+    for (let i = 0; i < 50; i++) {
+      confetti.push({
+        x: Math.random() * 100,
+        delay: Math.random() * 0.5,
+        size: Math.random() * 8 + 6,
+        round: Math.random() > 0.5,
+      });
+    }
+    this._confetti = confetti;
+    setTimeout(() => {
+      this._confetti = [];
+      this.requestUpdate();
+    }, 3500);
+  }
+
+  _playFanfareSound() {
+    try {
+      if (!this._audioContext) {
+        this._audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (this._audioContext.state === 'suspended') {
+        this._audioContext.resume();
+      }
+      const ctx = this._audioContext;
+      const startTime = ctx.currentTime;
+      const masterGain = ctx.createGain();
+      masterGain.connect(ctx.destination);
+      masterGain.gain.value = 0.2;
+      const pattern = [
+        { freq: 392.00, duration: 0.1, delay: 0 },
+        { freq: 392.00, duration: 0.1, delay: 0.12 },
+        { freq: 392.00, duration: 0.15, delay: 0.24 },
+        { freq: 329.63, duration: 0.15, delay: 0.42 },
+        { freq: 392.00, duration: 0.15, delay: 0.6 },
+        { freq: 523.25, duration: 0.4, delay: 0.78 },
+      ];
+      pattern.forEach(({ freq, duration, delay }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.frequency.value = freq;
+        osc.type = 'sawtooth';
+        const noteStart = startTime + delay;
+        gain.gain.setValueAtTime(0.5, noteStart);
+        gain.gain.setValueAtTime(0.5, noteStart + duration * 0.8);
+        gain.gain.exponentialRampToValueAtTime(0.01, noteStart + duration);
+        osc.start(noteStart);
+        osc.stop(noteStart + duration + 0.05);
+      });
+    } catch (e) {
+      console.warn('[Choremander] Error playing sound:', e);
+    }
+  }
+
+  _renderCelebration() {
+    const entity = this.hass.states[this.config.entity];
+    const pointsIcon = entity?.attributes?.points_icon || "mdi:star";
+    const reward = this._celebrating;
+
+    return html`
+      <div class="celebration-overlay" @click="${() => { this._celebrating = null; this.requestUpdate(); }}">
+        <div class="celebration-content" @click="${(e) => e.stopPropagation()}">
+          <div class="celebration-stars">&#127873;&#127775;&#127873;</div>
+          <div class="celebration-title">AWESOME!</div>
+          <div class="celebration-message">You claimed <strong>${reward?.name}</strong>!</div>
+          <div class="celebration-points">
+            <ha-icon icon="${pointsIcon}"></ha-icon>
+            −${reward?.cost || 0}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  _renderConfetti() {
+    const colors = ["#ff6b9d", "#9b59b6", "#3498db", "#2ecc71", "#f1c40f", "#e67e22"];
+    return html`
+      <div class="confetti-container">
+        ${this._confetti.map((piece, index) => html`
+          <div class="confetti" style="
+            left: ${piece.x}%;
+            animation-delay: ${piece.delay}s;
+            background: ${colors[index % colors.length]};
+            border-radius: ${piece.round ? '50%' : '0'};
+            width: ${piece.size}px;
+            height: ${piece.size}px;
+          "></div>
+        `)}
+      </div>
+    `;
   }
 
   _renderJackpotProgress(reward, childContributions, totalStars, pointsIcon, displayCost) {
