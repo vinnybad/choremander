@@ -64,6 +64,8 @@ class Child:
     best_streak: int = 0
     pending_rewards: list[str] = field(default_factory=list)
     chore_order: list[str] = field(default_factory=list)  # Custom chore ordering for this child
+    last_completion_date: str | None = None  # ISO date string of last chore completion (for streak tracking)
+    streak_paused: bool = False  # True if streak is paused due to missed day (pause mode)
     id: str = field(default_factory=generate_id)
 
     @classmethod
@@ -79,6 +81,8 @@ class Child:
             best_streak=data.get("best_streak", 0),
             pending_rewards=data.get("pending_rewards", []),
             chore_order=data.get("chore_order", []),
+            last_completion_date=data.get("last_completion_date", None),
+            streak_paused=data.get("streak_paused", False),
             id=data.get("id", generate_id()),
         )
 
@@ -94,6 +98,8 @@ class Child:
             "best_streak": self.best_streak,
             "pending_rewards": self.pending_rewards,
             "chore_order": self.chore_order,
+            "last_completion_date": self.last_completion_date,
+            "streak_paused": self.streak_paused,
             "id": self.id,
         }
 
@@ -273,5 +279,38 @@ class RewardClaim:
             "claimed_at": format_datetime(self.claimed_at),
             "approved": self.approved,
             "approved_at": format_datetime(self.approved_at),
+            "id": self.id,
+        }
+
+
+@dataclass
+class PointsTransaction:
+    """Represents a manual points adjustment (add or remove)."""
+
+    child_id: str
+    points: int  # positive = added, negative = removed
+    reason: str = ""
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    id: str = field(default_factory=generate_id)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> PointsTransaction:
+        """Create a PointsTransaction from a dictionary."""
+        created_at = parse_datetime(data.get("created_at"))
+        return cls(
+            child_id=data.get("child_id", ""),
+            points=data.get("points", 0),
+            reason=data.get("reason", ""),
+            created_at=created_at or datetime.now(timezone.utc),
+            id=data.get("id", generate_id()),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "child_id": self.child_id,
+            "points": self.points,
+            "reason": self.reason,
+            "created_at": format_datetime(self.created_at),
             "id": self.id,
         }
