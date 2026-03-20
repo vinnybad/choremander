@@ -129,6 +129,11 @@ class ChoremandorOverallStatsSensor(ChoremandorBaseSensor):
         now = dt_util.now()
         today = now.date()
         todays_completions = []
+        # Build chore lookup for enriching completions
+        chore_lookup = {c.id: c for c in chores}
+        # Build child lookup for enriching completions
+        child_lookup = {c.id: c for c in children}
+
         for comp in all_completions:
             # Convert completion time to HA timezone for proper date comparison
             comp_dt = comp.completed_at
@@ -136,22 +141,39 @@ class ChoremandorOverallStatsSensor(ChoremandorBaseSensor):
                 # If timezone-aware, convert to HA timezone
                 comp_dt = dt_util.as_local(comp_dt)
             comp_date = comp_dt.date() if hasattr(comp_dt, 'date') else comp_dt
+            matched_chore = chore_lookup.get(comp.chore_id)
             if comp_date == today:
                 todays_completions.append({
                     "completion_id": comp.id,
                     "chore_id": comp.chore_id,
                     "child_id": comp.child_id,
+                    "child_name": child_lookup.get(comp.child_id, None) and child_lookup[comp.child_id].name or "",
+                    "chore_name": matched_chore.name if matched_chore else "",
+                    "points": matched_chore.points if matched_chore else 0,
                     "approved": comp.approved,
                     "completed_at": comp.completed_at.isoformat() if hasattr(comp.completed_at, 'isoformat') else str(comp.completed_at),
                 })
 
-        # Calculate pending points per child
+        # Calculate pending points per child (chores awaiting approval = points to be earned)
         pending_points_by_child = {}
         for comp in pending_completions:
             child_id = comp.child_id
             chore = next((c for c in chores if c.id == comp.chore_id), None)
             if chore:
                 pending_points_by_child[child_id] = pending_points_by_child.get(child_id, 0) + chore.points
+
+        # Calculate committed points per child (reward claims awaiting approval = points reserved)
+        committed_points_by_child = {}
+        pending_reward_claim_objs = data.get("pending_reward_claims", [])
+        for rc in pending_reward_claim_objs:
+            reward = next((r for r in rewards if r.id == rc.reward_id), None)
+            if reward:
+                try:
+                    costs = self.coordinator.calculate_dynamic_reward_costs(reward)
+                    cost = costs.get(rc.child_id, reward.cost)
+                except Exception:
+                    cost = reward.cost
+                committed_points_by_child[rc.child_id] = committed_points_by_child.get(rc.child_id, 0) + cost
 
         # Build chores list with explicit assigned_to handling
         chores_list = []
@@ -167,6 +189,8 @@ class ChoremandorOverallStatsSensor(ChoremandorBaseSensor):
                 "assigned_to": assigned_to,
                 "completion_sound": getattr(c, 'completion_sound', 'coin'),
                 "completion_percentage_per_month": getattr(c, 'completion_percentage_per_month', 100),
+                "due_days": getattr(c, 'due_days', []) or [],
+                "requires_approval": getattr(c, 'requires_approval', True),
             })
 
         # Build rewards list with per-child dynamic cost calculation
@@ -212,7 +236,12 @@ class ChoremandorOverallStatsSensor(ChoremandorBaseSensor):
                 "child_daily_points": child_daily_points,  # Dict of child_id -> daily expected points (for weighted jackpot meter)
             })
 
+        # Day of week for due_days filtering in frontend (lowercase, e.g. "monday")
+        today_dow = dt_util.now().strftime("%A").lower()
+
         return {
+            "today_day_of_week": today_dow,
+            "streak_reset_mode": data.get("settings", {}).get("streak_reset_mode", "reset"),
             "total_children": len(children),
             "total_chores": len(chores),
             "total_rewards": len(rewards),
@@ -220,18 +249,129 @@ class ChoremandorOverallStatsSensor(ChoremandorBaseSensor):
             "total_chores_completed": total_chores_completed,
             "points_name": data.get("points_name", "Stars"),
             "points_icon": data.get("points_icon", "mdi:star"),
-            "children": [{"id": c.id, "name": c.name, "points": c.points, "pending_points": pending_points_by_child.get(c.id, 0), "chore_order": c.chore_order} for c in children],
+            "children": [{
+                "id": c.id,
+                "name": c.name,
+                "points": c.points,
+                "pending_points": pending_points_by_child.get(c.id, 0),
+                "committed_points": committed_points_by_child.get(c.id, 0),
+                "chore_order": c.chore_order,
+                "current_streak": getattr(c, 'current_streak', 0) or 0,
+                "best_streak": getattr(c, 'best_streak', 0) or 0,
+                "total_points_earned": getattr(c, 'total_points_earned', 0) or 0,
+                "total_chores_completed": getattr(c, 'total_chores_completed', 0) or 0,
+                "avatar": getattr(c, 'avatar', 'mdi:account-circle') or 'mdi:account-circle',
+                "last_completion_date": getattr(c, 'last_completion_date', None),
+                "streak_paused": getattr(c, 'streak_paused', False),
+            } for c in children],
             "chores": chores_list,
             "rewards": rewards_list,
             "todays_completions": todays_completions,
             "total_completions_all_time": len(all_completions),
             "total_pending_completions": len(pending_completions),
+            "pending_reward_claims": self._build_pending_reward_claims(
+                data.get("pending_reward_claims", []), rewards, child_lookup
+            ),
+            "recent_completions": [{
+                "completion_id": comp.id,
+                "chore_id": comp.chore_id,
+                "child_id": comp.child_id,
+                "child_name": child_lookup.get(comp.child_id, None) and child_lookup[comp.child_id].name or "",
+                "chore_name": chore_lookup.get(comp.chore_id, None) and chore_lookup[comp.chore_id].name or "",
+                "points": chore_lookup.get(comp.chore_id, None) and chore_lookup[comp.chore_id].points or 0,
+                "approved": comp.approved,
+                "completed_at": comp.completed_at.isoformat() if hasattr(comp.completed_at, 'isoformat') else str(comp.completed_at),
+            } for comp in sorted(all_completions, key=lambda c: c.completed_at, reverse=True)[:200]],
+            "recent_transactions": self._build_recent_transactions(
+                data.get("points_transactions", []),
+                data.get("reward_claims", []),
+                rewards,
+                child_lookup,
+            ),
         }
 
     @property
     def icon(self) -> str:
         """Return the icon."""
         return "mdi:clipboard-check-multiple"
+
+
+    def _build_recent_transactions(self, points_transactions, all_reward_claims, rewards, child_lookup):
+        """Build unified activity feed of manual point adjustments and reward claims."""
+        reward_lookup = {r.id: r for r in rewards}
+        events = []
+
+        # Manual points transactions
+        for t in points_transactions:
+            child = child_lookup.get(t.child_id)
+            if not child:
+                continue
+            events.append({
+                "transaction_id": t.id,
+                "type": "points_added" if t.points > 0 else "points_removed",
+                "child_id": t.child_id,
+                "child_name": child.name,
+                "points": t.points,
+                "reason": t.reason or "",
+                "created_at": t.created_at.isoformat() if hasattr(t.created_at, 'isoformat') else str(t.created_at),
+            })
+
+        # Reward claims — show both pending and approved
+        for rc in all_reward_claims:
+            child = child_lookup.get(rc.child_id)
+            reward = reward_lookup.get(rc.reward_id)
+            if not child or not reward:
+                continue
+            try:
+                costs = self.coordinator.calculate_dynamic_reward_costs(reward)
+                cost = costs.get(rc.child_id, reward.cost)
+            except Exception:
+                cost = reward.cost
+            event_type = "reward_approved" if rc.approved else "reward_claimed"
+            timestamp = rc.approved_at if rc.approved and rc.approved_at else rc.claimed_at
+            events.append({
+                "transaction_id": rc.id,
+                "type": event_type,
+                "child_id": rc.child_id,
+                "child_name": child.name,
+                "reward_id": rc.reward_id,
+                "reward_name": reward.name,
+                "reward_icon": reward.icon or "mdi:gift",
+                "points": -cost,  # negative — points spent
+                "approved": rc.approved,
+                "created_at": timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
+            })
+
+        # Sort all events newest first, cap at 50
+        events.sort(key=lambda e: e["created_at"], reverse=True)
+        return events[:50]
+
+    def _build_pending_reward_claims(self, pending_claims, rewards, child_lookup):
+        """Build enriched pending reward claims list."""
+        reward_lookup = {r.id: r for r in rewards}
+        result = []
+        for rc in pending_claims:
+            reward = reward_lookup.get(rc.reward_id)
+            child = child_lookup.get(rc.child_id)
+            if not reward or not child:
+                continue
+            try:
+                costs = self.coordinator.calculate_dynamic_reward_costs(reward)
+                cost = costs.get(rc.child_id, reward.cost)
+            except Exception:
+                cost = reward.cost
+            result.append({
+                "claim_id": rc.id,
+                "reward_id": rc.reward_id,
+                "child_id": rc.child_id,
+                "child_name": child.name,
+                "child_avatar": getattr(child, 'avatar', 'mdi:account-circle') or 'mdi:account-circle',
+                "reward_name": reward.name,
+                "reward_icon": reward.icon or 'mdi:gift',
+                "cost": cost,
+                "claimed_at": rc.claimed_at.isoformat() if hasattr(rc.claimed_at, 'isoformat') else str(rc.claimed_at),
+            })
+        return result
 
 
 class ChildPointsSensor(ChoremandorBaseSensor):

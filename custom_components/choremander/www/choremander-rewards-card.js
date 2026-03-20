@@ -20,7 +20,13 @@ class ChoremanderRewardsCard extends LitElement {
     return {
       hass: { type: Object },
       config: { type: Object },
+      _loading: { type: Object },
     };
+  }
+
+  constructor() {
+    super();
+    this._loading = {};
   }
 
   static get styles() {
@@ -453,6 +459,50 @@ class ChoremanderRewardsCard extends LitElement {
         color: white;
       }
 
+      /* Pending approval state */
+      .reward-row.pending-approval {
+        opacity: 0.6;
+        border-left: 3px solid #e67e22;
+      }
+
+      .pending-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: rgba(230,126,34,0.12);
+        color: #e67e22;
+        border-radius: 8px;
+        padding: 3px 8px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-top: 4px;
+      }
+
+      .pending-label ha-icon { --mdc-icon-size: 12px; }
+
+      /* Claim button */
+      .claim-btn {
+        width: 42px; height: 42px;
+        border-radius: 50%; border: none; cursor: pointer;
+        background: linear-gradient(135deg, #9b59b6, #8e44ad);
+        color: white;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 3px 10px rgba(155,89,182,0.35);
+        transition: transform 0.15s, box-shadow 0.15s;
+        flex-shrink: 0;
+      }
+
+      .claim-btn:hover { transform: scale(1.08); box-shadow: 0 4px 14px rgba(155,89,182,0.45); }
+      .claim-btn:active { transform: scale(0.96); }
+      .claim-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+      .claim-btn ha-icon { --mdc-icon-size: 22px; }
+
+      .claim-btn.cant-afford {
+        background: linear-gradient(135deg, #bdc3c7, #95a5a6);
+        box-shadow: none;
+        cursor: not-allowed;
+      }
+
       /* Empty state */
       .empty-state {
         display: flex;
@@ -728,8 +778,25 @@ class ChoremanderRewardsCard extends LitElement {
 
     const percentage = Math.min((currentStars / displayCost) * 100, 100);
 
+    // Check if this reward has a pending claim
+    const entity = this.hass?.states?.[this.config?.entity];
+    const pendingClaims = entity?.attributes?.pending_reward_claims || [];
+    const childId = this.config?.child_id;
+    const hasPendingClaim = pendingClaims.some(c =>
+      c.reward_id === reward.id && (!childId || c.child_id === childId)
+    );
+
+    // Can the current child afford it? Account for points committed to other pending claims
+    const relevantChild = childId
+      ? children.find(c => c.id === childId)
+      : relevantChildren[0];
+    const committedPoints = relevantChild?.committed_points || 0;
+    const availablePoints = (relevantChild?.points || 0) - committedPoints;
+    const canAfford = relevantChild && availablePoints >= displayCost;
+    const isLoading = this._loading[reward.id];
+
     return html`
-      <div class="reward-row ${isJackpot ? 'jackpot' : ''} ${isDynamicPricing ? 'dynamic' : ''}">
+      <div class="reward-row ${isJackpot ? 'jackpot' : ''} ${isDynamicPricing ? 'dynamic' : ''} ${hasPendingClaim ? 'pending-approval' : ''}">
         <div class="cost-badge ${isDynamicPricing ? 'dynamic-cost' : ''}">
           <ha-icon icon="${pointsIcon}"></ha-icon>
           <span class="cost-value">${displayCost}</span>
@@ -747,6 +814,13 @@ class ChoremanderRewardsCard extends LitElement {
             ? this._renderJackpotProgress(reward, childContributions, currentStars, pointsIcon, displayCost)
             : this._renderRegularProgress(currentStars, displayCost, percentage, pointsIcon)}
 
+          ${hasPendingClaim ? html`
+            <div class="pending-label">
+              <ha-icon icon="mdi:clock-outline"></ha-icon>
+              Awaiting parent approval
+            </div>
+          ` : ''}
+
           ${showChildBadges && !isJackpot
             ? html`
                 <div class="assigned-children">
@@ -760,11 +834,38 @@ class ChoremanderRewardsCard extends LitElement {
               `
             : ""}
         </div>
-        <div class="reward-icon-container">
+        <div class="reward-icon-container" style="display:flex;flex-direction:column;align-items:center;gap:8px;">
           <ha-icon icon="${rewardIcon}"></ha-icon>
+          ${!hasPendingClaim && childId ? html`
+            <button
+              class="claim-btn ${!canAfford ? 'cant-afford' : ''}"
+              ?disabled="${!canAfford || isLoading}"
+              @click="${(e) => { e.stopPropagation(); this._handleClaim(reward, relevantChild); }}"
+              title="${canAfford ? 'Claim reward' : 'Not enough points'}"
+            >
+              <ha-icon icon="${isLoading ? 'mdi:loading' : 'mdi:gift'}"></ha-icon>
+            </button>
+          ` : ''}
         </div>
       </div>
     `;
+  }
+
+  async _handleClaim(reward, child) {
+    if (!child || !reward) return;
+    this._loading = { ...this._loading, [reward.id]: true };
+    this.requestUpdate();
+    try {
+      await this.hass.callService("choremander", "claim_reward", {
+        reward_id: reward.id,
+        child_id: child.id,
+      });
+    } catch (e) {
+      console.error("Failed to claim reward:", e);
+    } finally {
+      this._loading = { ...this._loading, [reward.id]: false };
+      this.requestUpdate();
+    }
   }
 
   _renderRegularProgress(currentStars, cost, percentage, pointsIcon) {
@@ -1017,7 +1118,7 @@ class ChoremanderRewardsCardEditor extends LitElement {
   }
 
   _childIdChanged(e) {
-    const value = e.target.value;
+    const value = e.detail?.value ?? e.target?.value;
     this._updateConfig("child_id", value || null);
   }
 

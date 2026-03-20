@@ -116,3 +116,14 @@ remove_points:
       required: false
       selector:
         text:
+
+reject_reward:
+  name: Reject Reward
+  description: Reject a reward claim (no points deducted as approval was pending)
+  fields:
+    claim_id:
+      name: Claim ID
+      description: The ID of the reward claim to reject
+      required: true
+      selector:
+        text:

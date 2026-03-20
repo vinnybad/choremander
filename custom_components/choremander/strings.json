@@ -171,7 +171,13 @@
         "description": "Configure your Choremander settings",
         "data": {
           "points_name": "Points Currency Name",
-          "points_icon": "Points Icon"
+          "points_icon": "Points Icon",
+          "streak_reset_mode": "Streak Reset Mode",
+          "history_days": "History Days to Keep"
+        },
+        "data_description": {
+          "streak_reset_mode": "What happens to a streak when a day is missed",
+          "history_days": "How many days of chore completion history to retain (30-365)"
         }
       }
     },
@@ -271,6 +277,16 @@
         "reason": {
           "name": "Reason",
           "description": "Optional reason for the penalty"
+        }
+      }
+    },
+    "reject_reward": {
+      "name": "Reject Reward",
+      "description": "Reject a reward claim",
+      "fields": {
+        "claim_id": {
+          "name": "Claim ID",
+          "description": "The ID of the reward claim to reject"
         }
       }
     }
