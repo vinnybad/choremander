@@ -1,16 +1,17 @@
 """Data coordinator for Choremander integration."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import logging
 from typing import Any
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .models import Child, Chore, ChoreCompletion, Reward, RewardClaim
+from .models import Child, Chore, ChoreCompletion, Reward, RewardClaim, PointsTransaction
 from .storage import ChoremanderStorage
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,11 +30,94 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         )
         self.storage = ChoremanderStorage(hass, entry_id)
         self.entry_id = entry_id
+        self._unsub_midnight: callable | None = None
+        self._unsub_prune: callable | None = None
 
     async def async_initialize(self) -> None:
         """Initialize the coordinator."""
         await self.storage.async_load()
         await self.async_refresh()
+        # Schedule midnight streak check at 00:00:05
+        self._unsub_midnight = async_track_time_change(
+            self.hass, self._async_midnight_streak_check, hour=0, minute=0, second=5
+        )
+        # Schedule daily history pruning at 00:01:00
+        self._unsub_prune = async_track_time_change(
+            self.hass, self._async_scheduled_prune, hour=0, minute=1, second=0
+        )
+
+    async def async_shutdown(self) -> None:
+        """Shutdown the coordinator and clean up listeners."""
+        if self._unsub_midnight:
+            self._unsub_midnight()
+            self._unsub_midnight = None
+        if self._unsub_prune:
+            self._unsub_prune()
+            self._unsub_prune = None
+
+    @callback
+    def _async_midnight_streak_check(self, now: datetime) -> None:
+        """Scheduled callback at midnight to check and reset streaks if needed."""
+        self.hass.async_create_task(self._async_check_streaks())
+
+    @callback
+    def _async_scheduled_prune(self, now: datetime) -> None:
+        """Scheduled callback to prune old completion history."""
+        days = int(self.storage.get_setting("history_days", "90"))
+        self.hass.async_create_task(self.async_prune_history(days))
+
+    async def _async_check_streaks(self) -> None:
+        """Check all children's streaks and reset/pause if they missed yesterday.
+
+        Behaviour depends on streak_reset_mode setting:
+        - "reset" (default): streak goes back to 0 on missed day
+        - "pause": streak is preserved but not incremented until they complete again
+        """
+        today = dt_util.now().date()
+        yesterday = today - timedelta(days=1)
+        yesterday_str = yesterday.isoformat()
+        today_str = today.isoformat()
+
+        streak_mode = self.storage.get_setting("streak_reset_mode", "reset")
+
+        children = self.storage.get_children()
+        changed = False
+
+        for child in children:
+            last_date_str = getattr(child, "last_completion_date", None)
+            if last_date_str is None:
+                continue  # No completions yet, nothing to do
+
+            # If last completion was today or yesterday, streak is fine
+            if last_date_str in (yesterday_str, today_str):
+                continue
+
+            # They missed a day
+            if (child.current_streak or 0) > 0:
+                if streak_mode == "pause":
+                    # Preserve the streak value but mark it as paused
+                    # We do this by leaving current_streak as-is — _award_points
+                    # will NOT increment it (gap detected) but won't reset either
+                    # We need a flag so _award_points knows to resume not reset
+                    child.streak_paused = True
+                    _LOGGER.info(
+                        "Streak paused for %s (last completion: %s, mode=pause)",
+                        child.name, last_date_str
+                    )
+                else:
+                    # Default: reset to 0
+                    child.current_streak = 0
+                    child.streak_paused = False
+                    _LOGGER.info(
+                        "Streak reset for %s (last completion: %s, mode=reset)",
+                        child.name, last_date_str
+                    )
+                self.storage.update_child(child)
+                changed = True
+
+        if changed:
+            await self.storage.async_save()
+            await self.async_refresh()
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from storage."""
@@ -45,8 +129,10 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
             "pending_completions": self.storage.get_pending_completions(),
             "reward_claims": self.storage.get_reward_claims(),
             "pending_reward_claims": self.storage.get_pending_reward_claims(),
+            "points_transactions": self.storage.get_points_transactions(),
             "points_name": self.storage.get_points_name(),
             "points_icon": self.storage.get_points_icon(),
+            "settings": self.storage._data.get("settings", {}),
         }
 
     # Child operations
@@ -475,7 +561,7 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
 
     # Reward claim operations
     async def async_claim_reward(self, reward_id: str, child_id: str) -> RewardClaim:
-        """Child claims a reward."""
+        """Child claims a reward — creates a pending claim awaiting parent approval."""
         reward = self.get_reward(reward_id)
         if not reward:
             raise ValueError(f"Reward {reward_id} not found")
@@ -491,15 +577,13 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         if child.points < effective_cost:
             raise ValueError(f"Not enough points. Need {effective_cost}, have {child.points}")
 
+        # Points are NOT deducted here — they are deducted on parent approval
+        # This mirrors the chore approval flow
         claim = RewardClaim(
             reward_id=reward_id,
             child_id=child_id,
             claimed_at=dt_util.now(),
         )
-
-        # Deduct points immediately using the effective cost
-        child.points -= effective_cost
-        self.storage.update_child(child)
 
         self.storage.add_reward_claim(claim)
         await self.storage.async_save()
@@ -507,10 +591,27 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         return claim
 
     async def async_approve_reward(self, claim_id: str) -> None:
-        """Approve a reward claim."""
+        """Approve a reward claim and deduct points from the child."""
         claims = self.storage.get_reward_claims()
         for claim in claims:
             if claim.id == claim_id:
+                reward = self.get_reward(claim.reward_id)
+                child = self.get_child(claim.child_id)
+                if not reward or not child:
+                    raise ValueError(f"Reward or child not found for claim {claim_id}")
+
+                # Deduct points now that parent has approved
+                costs = self.calculate_dynamic_reward_costs(reward)
+                effective_cost = costs.get(claim.child_id, reward.cost)
+
+                if child.points < effective_cost:
+                    raise ValueError(
+                        f"Not enough points to approve. Need {effective_cost}, have {child.points}"
+                    )
+
+                child.points -= effective_cost
+                self.storage.update_child(child)
+
                 claim.approved = True
                 claim.approved_at = dt_util.now()
                 self.storage.update_reward_claim(claim)
@@ -519,25 +620,13 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
                 return
 
     async def async_reject_reward(self, claim_id: str) -> None:
-        """Reject a reward claim and refund points."""
-        claims = self.storage.get_reward_claims()
-        for claim in claims:
-            if claim.id == claim_id:
-                reward = self.get_reward(claim.reward_id)
-                child = self.get_child(claim.child_id)
-                if reward and child:
-                    # Refund points using the effective cost for this child
-                    costs = self.calculate_dynamic_reward_costs(reward)
-                    effective_cost = costs.get(claim.child_id, reward.cost)
-                    child.points += effective_cost
-                    self.storage.update_child(child)
-                self.storage._data["reward_claims"] = [
-                    c for c in self.storage._data.get("reward_claims", [])
-                    if c.get("id") != claim_id
-                ]
-                await self.storage.async_save()
-                await self.async_refresh()
-                return
+        """Reject a reward claim — no refund needed as points were never deducted."""
+        self.storage._data["reward_claims"] = [
+            c for c in self.storage._data.get("reward_claims", [])
+            if c.get("id") != claim_id
+        ]
+        await self.storage.async_save()
+        await self.async_refresh()
 
     # Points operations
     async def async_add_points(self, child_id: str, points: int, reason: str = "") -> None:
@@ -545,7 +634,17 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         child = self.get_child(child_id)
         if not child:
             raise ValueError(f"Child {child_id} not found")
-        await self._award_points(child, points)
+        child.points += points
+        child.total_points_earned += points
+        self.storage.update_child(child)
+        # Log the manual transaction
+        transaction = PointsTransaction(
+            child_id=child_id,
+            points=points,
+            reason=reason,
+            created_at=dt_util.now(),
+        )
+        self.storage.add_points_transaction(transaction)
         await self.storage.async_save()
         await self.async_refresh()
 
@@ -554,18 +653,89 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         child = self.get_child(child_id)
         if not child:
             raise ValueError(f"Child {child_id} not found")
+        actual_deducted = min(points, child.points)  # Can't go below 0
         child.points = max(0, child.points - points)
         self.storage.update_child(child)
+        # Log the manual transaction (negative points)
+        transaction = PointsTransaction(
+            child_id=child_id,
+            points=-actual_deducted,
+            reason=reason,
+            created_at=dt_util.now(),
+        )
+        self.storage.add_points_transaction(transaction)
         await self.storage.async_save()
         await self.async_refresh()
 
     async def _award_points(self, child: Child, points: int) -> None:
-        """Award points to a child."""
+        """Award points to a child and update streak."""
         child.points += points
         child.total_points_earned += points
         child.total_chores_completed += 1
 
+        # Update streak tracking
+        today_str = dt_util.now().date().isoformat()
+        last_date_str = getattr(child, 'last_completion_date', None)
+
+        streak_mode = self.storage.get_setting("streak_reset_mode", "reset")
+        streak_paused = getattr(child, "streak_paused", False)
+
+        if last_date_str is None:
+            # First ever completion — start streak at 1
+            child.current_streak = 1
+            child.streak_paused = False
+        elif last_date_str == today_str:
+            # Already completed something today — streak unchanged
+            pass
+        else:
+            try:
+                last_date = date.fromisoformat(last_date_str)
+                yesterday = dt_util.now().date() - timedelta(days=1)
+                if last_date == yesterday:
+                    # Consecutive day — extend streak
+                    child.current_streak = (child.current_streak or 0) + 1
+                    child.streak_paused = False
+                elif streak_mode == "pause" or streak_paused:
+                    # Pause mode — resume streak from where it was (don't increment)
+                    child.streak_paused = False
+                    _LOGGER.debug("Streak resumed for %s at %d", child.name, child.current_streak)
+                else:
+                    # Reset mode — gap means start over
+                    child.current_streak = 1
+                    child.streak_paused = False
+            except (ValueError, TypeError):
+                child.current_streak = 1
+                child.streak_paused = False
+
+        # Update last completion date
+        child.last_completion_date = today_str
+
+        # Update best streak
+        if child.current_streak > (child.best_streak or 0):
+            child.best_streak = child.current_streak
+
         self.storage.update_child(child)
+
+    async def async_prune_history(self, days: int = 90) -> None:
+        """Prune completion history older than specified days."""
+        cutoff = dt_util.now() - timedelta(days=days)
+        all_completions = self.storage.get_completions()
+        before = len(all_completions)
+
+        # Keep completions newer than cutoff OR unapproved (pending)
+        to_keep = [
+            c for c in all_completions
+            if c.completed_at >= cutoff or not c.approved
+        ]
+
+        if len(to_keep) < before:
+            self.storage._data["completions"] = [c.to_dict() for c in to_keep]
+            await self.storage.async_save()
+            await self.async_refresh()
+            _LOGGER.info(
+                "Pruned %d completions older than %d days",
+                before - len(to_keep), days
+            )
 
     # Child chore order operations
     async def async_set_chore_order(self, child_id: str, chore_order: list[str]) -> None:
@@ -576,6 +746,12 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
 
         child.chore_order = chore_order
         self.storage.update_child(child)
+        await self.storage.async_save()
+        await self.async_refresh()
+
+    async def async_set_setting(self, key: str, value: str) -> None:
+        """Update a generic setting."""
+        self.storage.set_setting(key, value)
         await self.storage.async_save()
         await self.async_refresh()
 
