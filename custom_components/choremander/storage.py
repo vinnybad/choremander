@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN
-from .models import Child, Chore, ChoreCompletion, Reward, RewardClaim
+from .models import Child, Chore, ChoreCompletion, Reward, RewardClaim, PointsTransaction
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +36,7 @@ class ChoremanderStorage:
                 "rewards": [],
                 "completions": [],
                 "reward_claims": [],
+                "points_transactions": [],
                 "points_name": "Stars",
                 "points_icon": "mdi:star",
             }
@@ -270,6 +271,32 @@ class ChoremanderStorage:
             if c.get("id") == claim.id:
                 claims[i] = claim.to_dict()
                 return
+
+    # Points transactions management
+    def get_points_transactions(self) -> list[PointsTransaction]:
+        """Get all points transactions."""
+        return [PointsTransaction.from_dict(t) for t in self._data.get("points_transactions", [])]
+
+    def add_points_transaction(self, transaction: PointsTransaction) -> None:
+        """Add a points transaction record."""
+        if "points_transactions" not in self._data:
+            self._data["points_transactions"] = []
+        self._data["points_transactions"].append(transaction.to_dict())
+
+        # Keep only the last 200 transactions to avoid unbounded storage growth
+        if len(self._data["points_transactions"]) > 200:
+            self._data["points_transactions"] = self._data["points_transactions"][-200:]
+
+    # Generic settings
+    def get_setting(self, key: str, default: str = "") -> str:
+        """Get a generic setting value."""
+        return self._data.get("settings", {}).get(key, default)
+
+    def set_setting(self, key: str, value: str) -> None:
+        """Set a generic setting value."""
+        if "settings" not in self._data:
+            self._data["settings"] = {}
+        self._data["settings"][key] = value
 
     # Settings
     def get_points_name(self) -> str:
