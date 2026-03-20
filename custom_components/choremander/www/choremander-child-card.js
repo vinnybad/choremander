@@ -69,7 +69,6 @@ class ChoremanderChildCard extends LitElement {
   _playSound(soundName) {
     // Don't play if sound is "none" or not specified
     if (!soundName || soundName === 'none') {
-      console.debug('[Choremander] Sound disabled for this chore');
       return;
     }
 
@@ -132,11 +131,9 @@ class ChoremanderChildCard extends LitElement {
           this._playAudioFile(`fart${randomFartNum}.mp3`);
           break;
         default:
-          console.warn(`[Choremander] Unknown sound: ${soundName}, playing coin`);
           this._playCoinSound(ctx, now);
       }
     } catch (e) {
-      console.warn('[Choremander] Error playing sound:', e);
     }
   }
 
@@ -391,10 +388,8 @@ class ChoremanderChildCard extends LitElement {
       const audio = new Audio(`/local/choremander/${filename}`);
       audio.volume = 1.0;
       audio.play().catch(e => {
-        console.warn('[Choremander] Error playing audio file:', e);
       });
     } catch (e) {
-      console.warn('[Choremander] Error creating audio element:', e);
     }
   }
 
@@ -412,54 +407,44 @@ class ChoremanderChildCard extends LitElement {
         --fun-cyan: #1abc9c;
       }
 
-      ha-card {
-        overflow: hidden;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 24px;
-        padding: 0;
-      }
+      ha-card { overflow: hidden; }
 
-      /* Header with child avatar and points */
+      /* ── Header — matches overview/weekly/streak card style ── */
       .card-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 20px 24px;
-        background: rgba(255, 255, 255, 0.15);
-        backdrop-filter: blur(10px);
+        padding: 14px 18px;
+        background: linear-gradient(135deg, #2c3e50 0%, #3d5166 100%);
+        color: white;
         gap: 12px;
         min-width: 0;
       }
 
-      .child-info {
+      .header-left {
         display: flex;
         align-items: center;
-        gap: 16px;
+        gap: 12px;
         min-width: 0;
-        flex-shrink: 1;
+        flex: 1;
       }
 
       .avatar-container {
-        position: relative;
-        width: 70px;
-        height: 70px;
+        width: 48px;
+        height: 48px;
+        min-width: 48px;
         border-radius: 50%;
-        background: white;
+        background: rgba(255,255,255,0.15);
+        border: 2px solid rgba(255,255,255,0.3);
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        animation: float 3s ease-in-out infinite;
-      }
-
-      @keyframes float {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-5px); }
+        flex-shrink: 0;
       }
 
       .avatar-container ha-icon {
-        --mdc-icon-size: 50px;
-        color: var(--fun-purple);
+        --mdc-icon-size: 30px;
+        color: white;
       }
 
       .child-name-container {
@@ -469,27 +454,25 @@ class ChoremanderChildCard extends LitElement {
       }
 
       .child-name {
-        font-size: clamp(1.2rem, 5vw, 2rem);
-        font-weight: bold;
+        font-size: 1.15rem;
+        font-weight: 700;
         color: white;
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      /* Points display - BIG and FUN! */
+      /* Points pill — right side of header */
       .points-display {
         display: flex;
         flex-direction: column;
         align-items: center;
-        background: white;
-        padding: 12px 16px;
-        border-radius: 20px;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        min-width: 0;
-        max-width: 45%;
-        flex-shrink: 1;
+        background: rgba(255,255,255,0.15);
+        border: 1px solid rgba(255,255,255,0.25);
+        padding: 8px 14px;
+        border-radius: 14px;
+        flex-shrink: 0;
+        min-width: 72px;
       }
 
       .stars-row {
@@ -510,39 +493,31 @@ class ChoremanderChildCard extends LitElement {
       }
 
       .stars-value {
-        font-size: clamp(1rem, 4vw, 1.8rem);
-        font-weight: bold;
+        font-size: 1.4rem;
+        font-weight: 800;
         line-height: 1;
         display: flex;
         align-items: center;
-        gap: 2px;
+        gap: 3px;
         white-space: nowrap;
+        color: white;
       }
 
-      .stars-value.my-stars {
-        color: var(--fun-purple);
-      }
+      .stars-value.my-stars { color: white; }
 
       .stars-value.waiting-stars {
-        color: var(--fun-orange);
-        font-size: clamp(0.85rem, 3.5vw, 1.4rem);
-        opacity: 0.9;
+        color: rgba(255,255,255,0.75);
+        font-size: 1rem;
       }
 
-      .stars-value ha-icon {
-        --mdc-icon-size: clamp(16px, 4vw, 24px);
-        flex-shrink: 0;
-      }
+      .stars-value ha-icon { --mdc-icon-size: 18px; flex-shrink: 0; }
 
       .stars-value.my-stars ha-icon {
         color: var(--fun-yellow);
         animation: spin-star 4s linear infinite;
       }
 
-      .stars-value.waiting-stars ha-icon {
-        color: var(--fun-orange);
-        animation: pulse-star 2s ease-in-out infinite;
-      }
+      .stars-value.waiting-stars ha-icon { color: var(--fun-orange); }
 
       @keyframes spin-star {
         0% { transform: rotate(0deg) scale(1); }
@@ -552,32 +527,23 @@ class ChoremanderChildCard extends LitElement {
         100% { transform: rotate(360deg) scale(1); }
       }
 
-      @keyframes pulse-star {
-        0%, 100% { transform: scale(1); opacity: 0.7; }
-        50% { transform: scale(1.1); opacity: 1; }
-      }
-
       .stars-label {
-        font-size: clamp(0.55rem, 2vw, 0.7rem);
+        font-size: 0.6rem;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         white-space: nowrap;
+        color: rgba(255,255,255,0.7);
       }
 
-      .stars-label.my-stars {
-        color: var(--fun-purple);
-      }
-
-      .stars-label.waiting-stars {
-        color: var(--fun-orange);
-      }
+      .stars-label.my-stars { color: rgba(255,255,255,0.7); }
+      .stars-label.waiting-stars { color: rgba(255,255,255,0.5); }
 
       .stars-divider {
-        width: 2px;
-        height: 35px;
-        background: linear-gradient(to bottom, transparent, #ddd, transparent);
-        margin: 0 4px;
+        width: 1px;
+        height: 28px;
+        background: rgba(255,255,255,0.25);
+        margin: 0 6px;
         flex-shrink: 0;
       }
 
@@ -587,28 +553,28 @@ class ChoremanderChildCard extends LitElement {
         display: flex;
         flex-direction: column;
         gap: 20px;
-        background: rgba(255, 255, 255, 0.95);
+        background: var(--card-background-color, #fff);
         min-height: 200px;
       }
 
       .section-title {
-        font-size: 1.8rem;
-        font-weight: bold;
+        font-size: 1.4rem;
+        font-weight: 700;
         color: var(--fun-purple);
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 10px;
         margin-bottom: 12px;
-        padding: 8px 0;
+        padding: 4px 0;
       }
 
-      .section-title ha-icon {
-        --mdc-icon-size: 36px;
-      }
+      .section-title ha-icon { --mdc-icon-size: 28px; }
+
+      .section-title-text { flex: 1; }
 
       /* Individual chore card - optimized for tablet touch, ENTIRE ROW IS CLICKABLE */
       .chore-card {
-        background: white;
+        background: var(--card-background-color, #fff);
         border-radius: 24px;
         padding: 20px 24px;
         display: flex;
@@ -632,22 +598,22 @@ class ChoremanderChildCard extends LitElement {
 
       .chore-card:nth-child(odd) {
         border-color: var(--fun-blue);
-        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        background: color-mix(in srgb, var(--fun-blue) 10%, var(--card-background-color, #fff));
       }
 
       .chore-card:nth-child(even) {
         border-color: var(--fun-pink);
-        background: linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%);
+        background: color-mix(in srgb, var(--fun-pink) 10%, var(--card-background-color, #fff));
       }
 
       .chore-card:nth-child(3n) {
         border-color: var(--fun-green);
-        background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+        background: color-mix(in srgb, var(--fun-green) 10%, var(--card-background-color, #fff));
       }
 
       .chore-card:nth-child(4n) {
         border-color: var(--fun-orange);
-        background: linear-gradient(135deg, #fff3e0 0%, #ffcc80 100%);
+        background: color-mix(in srgb, var(--fun-orange) 10%, var(--card-background-color, #fff));
       }
 
       /* Touch/hover feedback - works for both touch and mouse */
@@ -738,8 +704,8 @@ class ChoremanderChildCard extends LitElement {
         height: 44px;
         min-width: 44px;
         border-radius: 12px;
-        border: 3px solid #bdc3c7;
-        background: white;
+        border: 3px solid var(--divider-color, #bdc3c7);
+        background: var(--card-background-color, #fff);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -782,7 +748,7 @@ class ChoremanderChildCard extends LitElement {
       .chore-name {
         font-size: 1.5rem;
         font-weight: bold;
-        color: #333;
+        color: var(--primary-text-color);
         line-height: 1.2;
       }
 
@@ -805,6 +771,13 @@ class ChoremanderChildCard extends LitElement {
         to { transform: rotate(360deg); }
       }
 
+      /* Chore not due today — dimmed/greyed */
+      .chore-card.not-due-today {
+        opacity: 0.45;
+        filter: grayscale(0.6);
+        pointer-events: none;
+      }
+
       /* Chore card in completed state - faded green styling */
       .chore-card.completed {
         opacity: 0.75;
@@ -821,12 +794,39 @@ class ChoremanderChildCard extends LitElement {
       }
 
       .chore-card.completed .chore-name {
-        color: #2d5a3d;
+        color: var(--primary-text-color);
+        opacity: 0.7;
       }
 
       .chore-card.completed .chore-points {
-        color: #2d5a3d;
-        opacity: 0.8;
+        color: var(--primary-text-color);
+        opacity: 0.6;
+      }
+
+      /* Reset countdown — inline beside section title */
+      .reset-countdown {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--secondary-text-color);
+        background: var(--secondary-background-color, #f5f5f5);
+        border-radius: 20px;
+        padding: 2px 8px 2px 6px;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .reset-countdown ha-icon {
+        --mdc-icon-size: 12px;
+        flex-shrink: 0;
+      }
+
+      .reset-countdown.soon {
+        color: var(--fun-orange);
+        background: rgba(230,126,34,0.12);
+        font-weight: 700;
       }
 
       /* Empty state */
@@ -860,7 +860,7 @@ class ChoremanderChildCard extends LitElement {
 
       .empty-state .submessage {
         font-size: 1.1rem;
-        color: #666;
+        color: var(--secondary-text-color);
       }
 
       /* Celebration overlay */
@@ -884,7 +884,7 @@ class ChoremanderChildCard extends LitElement {
       }
 
       .celebration-content {
-        background: white;
+        background: var(--card-background-color, #fff);
         border-radius: 30px;
         padding: 40px 50px;
         text-align: center;
@@ -924,7 +924,7 @@ class ChoremanderChildCard extends LitElement {
 
       .celebration-message {
         font-size: 1.3rem;
-        color: #666;
+        color: var(--secondary-text-color);
         margin-bottom: 16px;
       }
 
@@ -1119,8 +1119,11 @@ class ChoremanderChildCard extends LitElement {
     this.config = {
       time_category: "anytime",
       debug: false,
-      default_sound: "coin",  // Default sound to use if chore doesn't specify one
-      undo_sound: "undo",     // Sound to play when undoing a completion
+      default_sound: "coin",
+      undo_sound: "undo",
+      due_days_mode: "hide",         // "hide" = hide chores not due today, "dim" = show greyed out
+      show_countdown: true,          // Show midnight reset countdown below section title
+      show_due_days_only: true,      // Whether to apply due_days filtering at all
       ...config,
     };
   }
@@ -1178,11 +1181,6 @@ class ChoremanderChildCard extends LitElement {
     const allChores = entity.attributes.chores || [];
 
     // Log raw data for debugging assignment issues
-    console.debug(
-      `[Choremander] Rendering card for child "${child.name}" (${child.id}), time_category="${this.config.time_category}"`,
-      `\n  Total chores in entity: ${allChores.length}`,
-      `\n  Children in entity:`, children.map(c => ({id: c.id, name: c.name}))
-    );
 
     // DEBUG: Create debug info object for visible debugging
     const debugInfo = {
@@ -1197,14 +1195,10 @@ class ChoremanderChildCard extends LitElement {
         isArray: Array.isArray(c.assigned_to)
       }))
     };
-    console.log('[Choremander DEBUG]', JSON.stringify(debugInfo, null, 2));
 
     const childChores = this._filterAndSortChores(allChores, child);
 
     // Log the filtering result
-    console.debug(
-      `[Choremander] After filtering: showing ${childChores.length} of ${allChores.length} chores for child "${child.name}" (${child.id})`
-    );
 
     // Store debug info for rendering
     this._debugInfo = {
@@ -1215,12 +1209,8 @@ class ChoremanderChildCard extends LitElement {
     const pointsIcon = entity.attributes.points_icon || "mdi:star";
     const pointsName = entity.attributes.points_name || "Stars";
 
-    // Get child entity for avatar
-    const childEntityId = Object.keys(this.hass.states).find(
-      eid => this.hass.states[eid].attributes?.child_id === this.config.child_id
-    );
-    const childEntity = childEntityId ? this.hass.states[childEntityId] : null;
-    const avatar = childEntity?.attributes?.avatar || "mdi:account-circle";
+    // Avatar now in children array directly
+    const avatar = child.avatar || "mdi:account-circle";
 
     // Get pending points for this child
     const pendingPoints = child.pending_points || 0;
@@ -1233,17 +1223,12 @@ class ChoremanderChildCard extends LitElement {
 
     // Debug logging to help troubleshoot daily limit issues
     if (allCompletions.length > 0 || todaysCompletions.length > 0) {
-      console.debug(
-        `[Choremander] Child "${child.name}" (${child.id}): ` +
-        `allCompletions = ${allCompletions.length}, todaysCompletions = ${todaysCompletions.length}`,
-        { allCompletions, todaysCompletions }
-      );
     }
 
     return html`
       <ha-card>
         <div class="card-header">
-          <div class="child-info">
+          <div class="header-left">
             <div class="avatar-container">
               <ha-icon icon="${avatar}"></ha-icon>
             </div>
@@ -1258,7 +1243,7 @@ class ChoremanderChildCard extends LitElement {
                   <ha-icon icon="${pointsIcon}"></ha-icon>
                   ${child.points}
                 </div>
-                <div class="stars-label my-stars">My ${pointsName}</div>
+                <div class="stars-label my-stars">${pointsName}</div>
               </div>
               ${pendingPoints > 0 ? html`
                 <div class="stars-divider"></div>
@@ -1267,7 +1252,7 @@ class ChoremanderChildCard extends LitElement {
                     <ha-icon icon="mdi:timer-sand"></ha-icon>
                     +${pendingPoints}
                   </div>
-                  <div class="stars-label waiting-stars">Waiting</div>
+                  <div class="stars-label waiting-stars">Pending</div>
                 </div>
               ` : ''}
             </div>
@@ -1280,7 +1265,16 @@ class ChoremanderChildCard extends LitElement {
             : html`
                 <div class="section-title">
                   <ha-icon icon="${this._getTimeCategoryIcon(this.config.time_category)}"></ha-icon>
-                  ${this._getDynamicTitle()}
+                  <span class="section-title-text">${this._getDynamicTitle()}</span>
+                  ${this.config.show_countdown !== false ? (() => {
+                    const countdown = this._getMidnightCountdown();
+                    return countdown ? html`
+                      <div class="reset-countdown ${countdown.soon ? 'soon' : ''}">
+                        <ha-icon icon="mdi:clock-outline"></ha-icon>
+                        <span>${countdown.label}</span>
+                      </div>
+                    ` : '';
+                  })() : ''}
                 </div>
                 ${childChores.map((chore, index) => this._renderChoreCard(chore, child, pointsIcon, todaysCompletions, index))}
               `}
@@ -1314,10 +1308,14 @@ class ChoremanderChildCard extends LitElement {
     const choreOrder = child.chore_order || [];
 
     // Debug logging to diagnose assignment filtering issues
-    console.debug(
-      `[Choremander] Filtering chores for child: id="${childId}" (type: ${typeof childId}), name="${childName}", config.child_id="${this.config.child_id}"`,
-      `\n  All chores:`, chores.map(c => ({name: c.name, assigned_to: c.assigned_to, assigned_to_type: typeof c.assigned_to}))
-    );
+
+    // Get today's day of week from sensor (set by backend) or compute client-side
+    const entity = this.hass?.states?.[this.config.entity];
+    const todayDow = entity?.attributes?.today_day_of_week ||
+      new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+
+    const dueDaysMode = this.config.due_days_mode || 'hide';
+    const showDueDaysOnly = this.config.show_due_days_only !== false;
 
     // First, filter chores for this child and time category
     const filteredChores = chores.filter(chore => {
@@ -1327,40 +1325,31 @@ class ChoremanderChildCard extends LitElement {
         chore.time_category === this.config.time_category ||
         chore.time_category === "anytime";
 
-      // Check if chore is assigned to this child
-      // If assigned_to is empty or not set, show to ALL children
-      // If assigned_to has specific child IDs, only show to those children
-      // Ensure assigned_to is always an array
+      // Check assignment
       let assignedTo = chore.assigned_to;
-      if (!Array.isArray(assignedTo)) {
-        assignedTo = [];
-      }
-
-      // Convert all assigned_to values to strings for consistent comparison
+      if (!Array.isArray(assignedTo)) assignedTo = [];
       const assignedToStrings = assignedTo.map(id => String(id));
-
-      // STRICT: Only check child ID, not name
-      // assigned_to should ONLY contain child IDs, never names
       const isAssignedToAll = assignedToStrings.length === 0;
       const isAssignedToChild = isAssignedToAll || assignedToStrings.includes(childId);
 
-      // Debug logging for each chore with assignments (always log to help debug)
-      console.debug(
-        `[Choremander] Chore "${chore.name}": ` +
-        `assigned_to=${JSON.stringify(assignedTo)} (isArray: ${Array.isArray(chore.assigned_to)}), ` +
-        `childId="${childId}", isAssignedToAll=${isAssignedToAll}, ` +
-        `isAssignedToChild=${isAssignedToChild}, matchesTime=${matchesTime}, ` +
-        `SHOWING=${matchesTime && isAssignedToChild}`
-      );
+      // Check due_days — if chore has due_days set and today isn't one of them
+      const dueDays = chore.due_days || [];
+      const hasDueDays = dueDays.length > 0;
+      const isDueToday = !hasDueDays || dueDays.includes(todayDow);
+
+      // If due_days filtering is on and mode is "hide", exclude not-due chores
+      if (showDueDaysOnly && hasDueDays && !isDueToday && dueDaysMode === 'hide') {
+        return false;
+      }
+
+      // Store due status on chore object for rendering
+      chore._isDueToday = isDueToday;
+      chore._hasDueDays = hasDueDays;
 
       return matchesTime && isAssignedToChild;
     });
 
     // Debug: Log the filtered results
-    console.debug(
-      `[Choremander] FINAL filtered chores for "${childName}" (${childId}): ${filteredChores.length} of ${chores.length}`,
-      filteredChores.map(c => c.name)
-    );
 
     // If no custom order is set, return filtered chores as-is
     if (choreOrder.length === 0) {
@@ -1466,6 +1455,33 @@ class ChoremanderChildCard extends LitElement {
     });
   }
 
+  _getMidnightCountdown() {
+    const tz = this.hass?.config?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const now = new Date();
+    // Get tomorrow midnight in HA timezone
+    const tomorrow = new Date(now.toLocaleDateString("en-CA", { timeZone: tz }) + "T00:00:00");
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    // Convert back to UTC ms
+    const tomorrowUTC = new Date(tomorrow.toLocaleString("en-US", { timeZone: tz }));
+    const diffMs = tomorrow - now;
+    if (diffMs <= 0) return null;
+
+    const totalMins = Math.floor(diffMs / 60000);
+    const hours = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+
+    const soon = totalMins <= 60; // less than 1 hour
+    let label;
+    if (hours > 0) {
+      label = `Chores reset in ${hours}h ${mins}m`;
+    } else if (mins > 0) {
+      label = `Chores reset in ${mins}m`;
+    } else {
+      label = "Chores resetting soon!";
+    }
+    return { label, soon };
+  }
+
   _renderEmptyState() {
     return html`
       <div class="empty-state">
@@ -1523,13 +1539,6 @@ class ChoremanderChildCard extends LitElement {
 
     // Debug logging to help troubleshoot daily limit issues
     if (childCompletionsToday.length > 0 || isCompletedForToday || hasOptimisticCompletion) {
-      console.debug(
-        `[Choremander] Chore "${chore.name}" (${chore.id}): ` +
-        `completions today = ${completionsToday}, daily limit = ${dailyLimit}, ` +
-        `completed = ${isCompletedForToday}, optimistic = ${!!hasOptimisticCompletion}, ` +
-        `completions:`,
-        childCompletionsToday
-      );
     }
 
     // Check if the most recent completion is pending approval
@@ -1540,8 +1549,10 @@ class ChoremanderChildCard extends LitElement {
     const colorClass = `color-${choreIndex % 8}`;
 
     // Click handler for the entire row
+    const notDueToday = chore._hasDueDays && !chore._isDueToday && this.config.due_days_mode === 'dim';
     const handleRowClick = () => {
       if (isLoading) return;
+      if (notDueToday) return;  // Dim mode — not interactive
       if (isCompletedForToday) {
         this._handleUndo(chore, child, childCompletionsToday);
       } else {
@@ -1551,9 +1562,9 @@ class ChoremanderChildCard extends LitElement {
 
     return html`
       <div
-        class="chore-card ${isLoading ? "loading" : ""} ${isCelebrating ? "celebrating" : ""} ${isCompletedForToday ? "completed" : ""}"
+        class="chore-card ${isLoading ? "loading" : ""} ${isCelebrating ? "celebrating" : ""} ${isCompletedForToday ? "completed" : ""} ${notDueToday ? "not-due-today" : ""}"
         @click="${handleRowClick}"
-        title="${isCompletedForToday ? 'Click to undo' : 'Click to complete'}"
+        title="${notDueToday ? 'Not scheduled for today' : isCompletedForToday ? 'Click to undo' : 'Click to complete'}"
       >
         <div class="chore-info">
           <div class="chore-number-wrapper">
@@ -1628,7 +1639,6 @@ class ChoremanderChildCard extends LitElement {
 
     // Check if already loading for this chore (prevent double-clicks during loading)
     if (this._loading[chore.id]) {
-      console.debug(`[Choremander] Chore "${chore.name}" is already loading, ignoring click`);
       return;
     }
 
@@ -1650,10 +1660,6 @@ class ChoremanderChildCard extends LitElement {
 
     // Guard: If daily limit already reached, don't allow another completion
     if (totalCompletions >= dailyLimit) {
-      console.debug(
-        `[Choremander] Daily limit already reached for chore "${chore.name}": ` +
-        `${actualCompletionsToday} actual + ${existingOptimisticCount} optimistic >= ${dailyLimit} limit`
-      );
       this.requestUpdate(); // Force re-render to show completed state
       return;
     }
@@ -1742,7 +1748,6 @@ class ChoremanderChildCard extends LitElement {
   async _handleUndo(chore, child, childCompletionsToday) {
     // Check if already loading for this chore (prevent double-clicks during loading)
     if (this._loading[chore.id]) {
-      console.debug(`[Choremander] Chore "${chore.name}" is already loading, ignoring undo click`);
       return;
     }
 
@@ -1758,11 +1763,8 @@ class ChoremanderChildCard extends LitElement {
     // Check for completion_id (from sensor) or id (fallback)
     const completionId = completionToUndo?.completion_id || completionToUndo?.id;
     if (!completionToUndo || !completionId) {
-      console.warn(`[Choremander] No completion found to undo for chore "${chore.name}"`, sortedCompletions);
       return;
     }
-
-    console.debug(`[Choremander] Undoing completion "${completionId}" for chore "${chore.name}"`);
 
     this._loading = { ...this._loading, [chore.id]: true };
     this.requestUpdate();
@@ -1772,8 +1774,6 @@ class ChoremanderChildCard extends LitElement {
       await this.hass.callService("choremander", "reject_chore", {
         completion_id: completionId,
       });
-
-      console.debug(`[Choremander] Successfully undid completion for chore "${chore.name}"`);
 
       // Play undo sound (sad/descending tone)
       const undoSoundToPlay = this.config.undo_sound || 'undo';
@@ -1838,33 +1838,91 @@ class ChoremanderChildCardEditor extends LitElement {
 
   static get styles() {
     return css`
-      .form-group {
-        margin-bottom: 16px;
-      }
+      :host { display: block; padding: 4px 0; }
 
-      .form-group label {
+      ha-textfield { width: 100%; margin-bottom: 8px; }
+
+      .field-row { margin-bottom: 16px; }
+
+      .field-label {
         display: block;
-        margin-bottom: 4px;
+        font-size: 12px;
         font-weight: 500;
-      }
-
-      .form-group input,
-      .form-group select {
-        width: 100%;
-        padding: 8px;
-        border: 1px solid var(--divider-color);
-        border-radius: 4px;
-        background: var(--card-background-color);
-        color: var(--primary-text-color);
-        font-size: 1em;
-        box-sizing: border-box;
-      }
-
-      .form-group small {
-        display: block;
-        margin-top: 4px;
         color: var(--secondary-text-color);
-        font-size: 0.85em;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 6px;
+        padding: 0 4px;
+      }
+
+      .field-select {
+        display: block;
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--divider-color, #e0e0e0);
+        border-radius: 4px;
+        background: var(--card-background-color, #fff);
+        color: var(--primary-text-color);
+        font-size: 14px;
+        font-family: var(--mdc-typography-body1-font-family, Roboto, sans-serif);
+        box-sizing: border-box;
+        cursor: pointer;
+        appearance: auto;
+        transition: border-color 0.15s;
+      }
+
+      .field-select:focus {
+        outline: none;
+        border-color: var(--primary-color, #3498db);
+        border-width: 2px;
+      }
+
+      .field-helper {
+        display: block;
+        font-size: 11px;
+        color: var(--secondary-text-color);
+        margin-top: 5px;
+        padding: 0 4px;
+        line-height: 1.4;
+      }
+
+      .check-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        border: 1px solid var(--divider-color, #e0e0e0);
+        border-radius: 4px;
+        background: var(--card-background-color, #fff);
+        cursor: pointer;
+        user-select: none;
+        margin-bottom: 4px;
+        transition: background 0.15s;
+      }
+
+      .check-row:hover { background: var(--secondary-background-color, #f5f5f5); }
+
+      .check-row input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+        flex-shrink: 0;
+        accent-color: var(--primary-color, #3498db);
+        margin: 0;
+      }
+
+      .check-label {
+        font-size: 14px;
+        color: var(--primary-text-color);
+        font-family: var(--mdc-typography-body1-font-family, Roboto, sans-serif);
+        flex: 1;
+        line-height: 1.3;
+      }
+
+      .section-divider {
+        height: 1px;
+        background: var(--divider-color, #e0e0e0);
+        margin: 16px 0;
       }
     `;
   }
@@ -1883,69 +1941,68 @@ class ChoremanderChildCardEditor extends LitElement {
     const children = overviewEntity?.attributes?.children || [];
 
     return html`
-      <div class="form-group">
-        <label>Overview Entity</label>
-        <input
-          type="text"
-          .value="${this.config.entity || ""}"
-          @input="${this._entityChanged}"
-          placeholder="sensor.choremander_overview"
-        />
-        <small>The Choremander overview sensor entity</small>
-      </div>
+      <ha-textfield
+        label="Overview Entity"
+        .value="${this.config.entity || ''}"
+        @change="${this._entityChanged}"
+        helper="The Choremander overview sensor entity"
+        helperPersistent
+        placeholder="sensor.choremander_overview"
+      ></ha-textfield>
 
-      <div class="form-group">
-        <label>Child</label>
-        <select @change="${this._childIdChanged}">
+      <div class="field-row">
+        <label class="field-label">Child</label>
+        <select class="field-select" @change="${this._childIdChanged}">
           <option value="">Select a child...</option>
-          ${children.map(
-            (child) => html`
-              <option value="${child.id}" ?selected="${this.config.child_id === child.id}">
-                ${child.name}
-              </option>
-            `
-          )}
+          ${children.map(child => html`
+            <option value="${child.id}" ?selected="${this.config.child_id === child.id}">${child.name}</option>
+          `)}
         </select>
-        <small>Which child is this card for?</small>
+        <span class="field-helper">Which child is this card for?</span>
       </div>
 
-      <div class="form-group">
-        <label>Time Category</label>
-        <select @change="${this._timeCategoryChanged}">
-          <option value="morning" ?selected="${this.config.time_category === "morning"}">
-            Morning Chores
-          </option>
-          <option value="afternoon" ?selected="${this.config.time_category === "afternoon"}">
-            Afternoon Chores
-          </option>
-          <option value="evening" ?selected="${this.config.time_category === "evening"}">
-            Evening Chores
-          </option>
-          <option value="night" ?selected="${this.config.time_category === "night"}">
-            Night Chores
-          </option>
-          <option value="anytime" ?selected="${this.config.time_category === "anytime"}">
-            Today's Chores (Anytime)
-          </option>
-          <option value="all" ?selected="${this.config.time_category === "all"}">
-            Today's Chores (All)
-          </option>
+      <div class="field-row">
+        <label class="field-label">Time Category</label>
+        <select class="field-select" @change="${this._timeCategoryChanged}">
+          <option value="morning" ?selected="${this.config.time_category === 'morning'}">Morning Chores</option>
+          <option value="afternoon" ?selected="${this.config.time_category === 'afternoon'}">Afternoon Chores</option>
+          <option value="evening" ?selected="${this.config.time_category === 'evening'}">Evening Chores</option>
+          <option value="night" ?selected="${this.config.time_category === 'night'}">Night Chores</option>
+          <option value="anytime" ?selected="${this.config.time_category === 'anytime'}">Today's Chores (Anytime)</option>
+          <option value="all" ?selected="${this.config.time_category === 'all'}">Today's Chores (All)</option>
         </select>
-        <small>Which time of day to show chores for (also sets the card title)</small>
+        <span class="field-helper">Which time of day to show chores for — also sets the card title</span>
       </div>
 
-      <div class="form-group">
-        <label>
-          <input
-            type="checkbox"
-            ?checked="${this.config.debug === true}"
-            @change="${this._debugChanged}"
-            style="margin-right: 8px;"
-          />
-          Show Debug Panel
-        </label>
-        <small>Display debug information at the bottom of the card</small>
+      <div class="field-row">
+        <label class="field-label">Chores Not Due Today</label>
+        <select class="field-select" @change="${e => this._updateConfig('due_days_mode', e.target.value)}">
+          <option value="hide" ?selected="${(this.config.due_days_mode || 'hide') === 'hide'}">Hide — don't show</option>
+          <option value="dim" ?selected="${this.config.due_days_mode === 'dim'}">Dim — show greyed out, non-interactive</option>
+          <option value="show" ?selected="${this.config.due_days_mode === 'show'}">Show — show normally regardless</option>
+        </select>
+        <span class="field-helper">Applies to chores with due_days set when today isn't scheduled</span>
       </div>
+
+      <div class="section-divider"></div>
+
+      <label class="check-row">
+        <input type="checkbox"
+          ?checked="${this.config.show_countdown !== false}"
+          
+          @change="${e => this._updateConfig('show_countdown', e.target.checked)}"
+        />
+        <span class="check-label">Show reset countdown beside "Today's Chores"</span>
+      </label>
+
+      <label class="check-row">
+        <input type="checkbox"
+          ?checked="${this.config.debug === true}"
+          
+          @change="${this._debugChanged}"
+        />
+        <span class="check-label">Show debug panel</span>
+      </label>
     `;
   }
 
