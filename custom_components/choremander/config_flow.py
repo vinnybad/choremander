@@ -714,7 +714,21 @@ class ChoremanderOptionsFlow(config_entries.OptionsFlow):
                 name=user_input.get("points_name", DEFAULT_POINTS_NAME),
                 icon=user_input.get("points_icon", DEFAULT_POINTS_ICON),
             )
+            await self.coordinator.async_set_setting(
+                "streak_reset_mode",
+                user_input.get("streak_reset_mode", "reset"),
+            )
+            await self.coordinator.async_set_setting(
+                "history_days",
+                str(int(float(user_input.get("history_days", 90)))),
+            )
             return await self.async_step_init()
+
+        current_streak_mode = self.coordinator.storage.get_setting("streak_reset_mode", "reset")
+        try:
+            current_history_days = float(self.coordinator.storage.get_setting("history_days", "90"))
+        except (ValueError, TypeError):
+            current_history_days = 90.0
 
         return self.async_show_form(
             step_id="settings",
@@ -728,6 +742,29 @@ class ChoremanderOptionsFlow(config_entries.OptionsFlow):
                         "points_icon",
                         default=self.coordinator.storage.get_points_icon(),
                     ): selector.IconSelector(),
+                    vol.Required(
+                        "streak_reset_mode",
+                        default=current_streak_mode,
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(value="reset", label="Reset — streak goes to 0 on missed day"),
+                                selector.SelectOptionDict(value="pause", label="Pause — streak preserved until next completion"),
+                            ],
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    ),
+                    vol.Required(
+                        "history_days",
+                        default=current_history_days,
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=30,
+                            max=365,
+                            step=1,
+                            mode=selector.NumberSelectorMode.BOX,
+                        )
+                    ),
                 }
             ),
         )
