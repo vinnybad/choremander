@@ -17,12 +17,16 @@ from .const import (
     ATTR_POINTS,
     ATTR_REASON,
     ATTR_REWARD_ID,
+    ATTR_SOUND,
     DOMAIN,
+    EVENT_PREVIEW_SOUND,
     SERVICE_ADD_POINTS,
     SERVICE_APPROVE_CHORE,
     SERVICE_APPROVE_REWARD,
     SERVICE_CLAIM_REWARD,
+    SERVICE_REJECT_REWARD,
     SERVICE_COMPLETE_CHORE,
+    SERVICE_PREVIEW_SOUND,
     SERVICE_REJECT_CHORE,
     SERVICE_REMOVE_POINTS,
     SERVICE_SET_CHORE_ORDER,
@@ -54,9 +58,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
-    # Register frontend static paths and Lovelace resources (only once)
+    # Register frontend static paths
     await async_register_frontend(hass)
-    await async_register_cards(hass)
+
+    # Register Lovelace resources only on first install, not on every restart
+    # A new entry has no prior data stored — use that to detect first install
+    is_first_install = not entry.data.get("resources_registered", False)
+    await async_register_cards(hass, first_install=is_first_install)
+
+    # Mark resources as registered so future restarts skip auto-registration
+    if is_first_install:
+        new_data = dict(entry.data)
+        new_data["resources_registered"] = True
+        hass.config_entries.async_update_entry(entry, data=new_data)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -70,6 +84,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    coordinator = hass.data[DOMAIN].get(entry.entry_id)
+    if coordinator:
+        await coordinator.async_shutdown()
+
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
 
@@ -123,6 +141,15 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         completion_id = call.data["completion_id"]
         await coordinator.async_reject_chore(completion_id)
 
+    async def handle_reject_reward(call: ServiceCall) -> None:
+        """Handle the reject_reward service call."""
+        coordinator = _get_coordinator(hass)
+        if not coordinator:
+            _LOGGER.error("No Choremander coordinator available")
+            return
+        claim_id = call.data["claim_id"]
+        await coordinator.async_reject_reward(claim_id)
+
     async def handle_claim_reward(call: ServiceCall) -> None:
         """Handle the claim_reward service call."""
         coordinator = _get_coordinator(hass)
@@ -163,6 +190,11 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         points = call.data[ATTR_POINTS]
         reason = call.data.get(ATTR_REASON, "")
         await coordinator.async_remove_points(child_id, points, reason)
+
+    async def handle_preview_sound(call: ServiceCall) -> None:
+        """Handle the preview_sound service call — fires a browser event for the config-sounds card."""
+        sound = call.data.get(ATTR_SOUND, "coin")
+        hass.bus.async_fire(EVENT_PREVIEW_SOUND, {"sound": sound})
 
     async def handle_set_chore_order(call: ServiceCall) -> None:
         """Handle the set_chore_order service call."""
@@ -223,6 +255,13 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
     hass.services.async_register(
         DOMAIN,
+        SERVICE_REJECT_REWARD,
+        handle_reject_reward,
+        schema=vol.Schema({ vol.Required("claim_id"): cv.string }),
+    )
+
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_APPROVE_REWARD,
         handle_approve_reward,
         schema=vol.Schema(
@@ -260,6 +299,21 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
     hass.services.async_register(
         DOMAIN,
+        SERVICE_PREVIEW_SOUND,
+        handle_preview_sound,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_SOUND): vol.In([
+                    "none", "coin", "levelup", "fanfare", "chime", "powerup", "undo",
+                    "fart1", "fart2", "fart3", "fart4", "fart5", "fart6", "fart7",
+                    "fart8", "fart9", "fart10", "fart_random",
+                ]),
+            }
+        ),
+    )
+
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_SET_CHORE_ORDER,
         handle_set_chore_order,
         schema=vol.Schema(
@@ -279,9 +333,11 @@ def _async_unregister_services(hass: HomeAssistant) -> None:
         SERVICE_REJECT_CHORE,
         SERVICE_CLAIM_REWARD,
         SERVICE_APPROVE_REWARD,
+        SERVICE_REJECT_REWARD,
         SERVICE_ADD_POINTS,
         SERVICE_REMOVE_POINTS,
         SERVICE_SET_CHORE_ORDER,
+        SERVICE_PREVIEW_SOUND,
     ]
     for service in services:
         hass.services.async_remove(DOMAIN, service)
