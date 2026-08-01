@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,6 +22,44 @@ export function reseed(): void {
     stdio: "ignore",
     timeout: 300_000,
   });
+}
+
+/**
+ * Call a Home Assistant service over REST, reusing the bootstrap credentials.
+ *
+ * Some card states cannot be reached from the fixture alone — nothing is
+ * affordable at the seeded balances (Krishna 25, Radha 15, cheapest reward 50),
+ * so a spec that exercises claiming has to arrange the balance first. Doing it
+ * over the API rather than by clicking through chores keeps the setup out of
+ * the behaviour under test.
+ */
+export async function callService(
+  domain: string,
+  service: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const creds = JSON.parse(fs.readFileSync(path.join(repoRoot, "dev", ".token"), "utf8"));
+  const baseURL = process.env.HASS_URL ?? creds.hass_url ?? "http://localhost:8123";
+
+  const response = await fetch(`${baseURL}/api/services/${domain}/${service}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${creds.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `${domain}.${service} failed (HTTP ${response.status}): ${await response.text()}`,
+    );
+  }
+}
+
+/** Give a child enough points that a reward becomes claimable. */
+export async function grantPoints(childId: string, points: number): Promise<void> {
+  await callService("choremander", "add_points", { child_id: childId, points });
 }
 
 /**
@@ -205,12 +244,76 @@ export class RewardsCard {
     return new RewardsCard(page.locator("choremander-rewards-card"));
   }
 
+  /** Pick one of several rewards cards on a page by its header title. */
+  static byTitle(page: Page, title: string): RewardsCard {
+    return new RewardsCard(
+      page
+        .locator("choremander-rewards-card")
+        .filter({ has: page.locator(".header-title", { hasText: title }) }),
+    );
+  }
+
   reward(name: string): Locator {
-    return this.root.locator(".reward-card, .reward-item").filter({ hasText: name });
+    return this.root.locator(".reward-row").filter({ hasText: name });
+  }
+
+  /** Reward names in rendered order — affordable ones sort to the top. */
+  get rewardNames(): Locator {
+    return this.root.locator(".reward-name");
+  }
+
+  /**
+   * The claim affordance. A real <button>, so `toBeDisabled` is meaningful:
+   * below the cost it is genuinely inert rather than merely dimmed.
+   */
+  claimButton(name: string): Locator {
+    return this.reward(name).locator("button.reward-claim-button");
+  }
+
+  /** "N more Stars needed", shown under the progress bar when short. */
+  shortfall(name: string): Locator {
+    return this.reward(name).locator(".shortfall-label");
   }
 
   get count(): Locator {
     return this.root.locator(".reward-count");
+  }
+
+  // -- Confirmation dialog -------------------------------------------
+
+  get dialog(): Locator {
+    return this.root.locator(".confirm-dialog");
+  }
+
+  /** Shown only when the card is unscoped and several children can afford it. */
+  claimant(childName: string): Locator {
+    return this.dialog.locator(".claimant-option").filter({ hasText: childName });
+  }
+
+  get confirm(): Locator {
+    return this.dialog.locator("button.btn-confirm");
+  }
+
+  get cancel(): Locator {
+    return this.dialog.locator("button.btn-cancel");
+  }
+
+  get celebration(): Locator {
+    return this.root.locator(".celebration-overlay");
+  }
+
+  /**
+   * Claim a reward and wait out the celebration.
+   *
+   * The overlay is fixed-position and covers the viewport for 3s, so a bare
+   * click followed by another interaction hits the overlay instead of the card.
+   */
+  async claim(name: string, claimant?: string): Promise<void> {
+    await this.claimButton(name).click();
+    if (claimant) await this.claimant(claimant).click();
+    await this.confirm.click();
+    await expect(this.celebration).toBeVisible();
+    await expect(this.celebration).toBeHidden({ timeout: 10_000 });
   }
 }
 
@@ -250,6 +353,8 @@ export async function openDashboard(page: Page, path: string): Promise<void> {
   await expect(page.locator("home-assistant")).toBeAttached();
   // Cards render asynchronously once the websocket delivers initial state.
   await expect(
-    page.locator("choremander-child-card, choremander-approvals-card, choremander-points-card"),
+    page.locator(
+      "choremander-child-card, choremander-approvals-card, choremander-points-card, choremander-rewards-card",
+    ),
   ).not.toHaveCount(0, { timeout: 30_000 });
 }

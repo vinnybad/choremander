@@ -27,7 +27,11 @@ dev/.token
 # hold no fixture value and would otherwise churn on every single run
 dev/config/.storage/core.area_registry
 dev/config/.storage/core.device_registry
+dev/config/.storage/core.entity_registry
 dev/config/.storage/core.restore_state
+# Rewritten with fresh random ids every time the integration registers its
+# cards, so it churned on literally every run while it was tracked.
+dev/config/.storage/lovelace_resources
 dev/config/.storage/lovelace.map
 dev/config/.storage/assist_pipeline.pipelines
 dev/config/.storage/bluetooth.passive_update_processor
