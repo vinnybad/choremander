@@ -4,7 +4,7 @@
  * Shows rewards in a vertical list with star cost, name, description, and progress gauges.
  * Supports regular rewards, Jackpot rewards, and Dynamic rewards (goal-based pricing).
  *
- * Version: 0.0.8
+ * Version: 0.0.9 - Density options and themeable sizing
  * Last Updated: 2026-08-01
  */
 
@@ -16,6 +16,9 @@ const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
 
 class ChoremanderRewardsCard extends LitElement {
+  /** Accepted values for the `density` option, loosest first. */
+  static DENSITIES = ["default", "cozy", "compact"];
+
   static get properties() {
     return {
       hass: { type: Object },
@@ -61,7 +64,7 @@ class ChoremanderRewardsCard extends LitElement {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 16px 20px;
+        padding: var(--chm-header-padding, 16px 20px);
         background: linear-gradient(135deg, var(--reward-purple) 0%, var(--reward-purple-light) 100%);
         color: white;
       }
@@ -73,12 +76,12 @@ class ChoremanderRewardsCard extends LitElement {
       }
 
       .header-icon {
-        --mdc-icon-size: 32px;
+        --mdc-icon-size: var(--chm-header-icon-size, 32px);
         opacity: 0.95;
       }
 
       .header-title {
-        font-size: 1.3rem;
+        font-size: var(--chm-header-title-font-size, 1.3rem);
         font-weight: 600;
       }
 
@@ -91,21 +94,21 @@ class ChoremanderRewardsCard extends LitElement {
       }
 
       .card-content {
-        padding: 16px;
+        padding: var(--chm-content-padding, 16px);
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: var(--chm-content-gap, 12px);
       }
 
       /* Individual reward row */
       .reward-row {
         display: flex;
         align-items: flex-start;
-        gap: 16px;
-        padding: 16px;
+        gap: var(--chm-reward-gap, 16px);
+        padding: var(--chm-reward-padding, 16px);
         background: var(--card-bg);
         border: 1px solid var(--divider);
-        border-radius: 12px;
+        border-radius: var(--chm-reward-radius, 12px);
         transition: box-shadow 0.2s ease, transform 0.15s ease;
       }
 
@@ -120,23 +123,23 @@ class ChoremanderRewardsCard extends LitElement {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        min-width: 70px;
-        padding: 12px 8px;
+        min-width: var(--chm-cost-badge-min-width, 70px);
+        padding: var(--chm-cost-badge-padding, 12px 8px);
         background: linear-gradient(135deg, var(--reward-gold) 0%, var(--reward-gold-dark) 100%);
-        border-radius: 12px;
+        border-radius: var(--chm-cost-badge-radius, 12px);
         box-shadow: 0 2px 8px rgba(241, 196, 15, 0.3);
         flex-shrink: 0;
       }
 
       .cost-badge ha-icon {
-        --mdc-icon-size: 24px;
+        --mdc-icon-size: var(--chm-cost-badge-icon-size, 24px);
         color: white;
         filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
         margin-bottom: 4px;
       }
 
       .cost-value {
-        font-size: 1.4rem;
+        font-size: var(--chm-cost-value-font-size, 1.4rem);
         font-weight: 700;
         color: white;
         text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -144,7 +147,7 @@ class ChoremanderRewardsCard extends LitElement {
       }
 
       .cost-label {
-        font-size: 0.65rem;
+        font-size: var(--chm-cost-label-font-size, 0.65rem);
         font-weight: 600;
         color: rgba(255, 255, 255, 0.9);
         text-transform: uppercase;
@@ -156,21 +159,21 @@ class ChoremanderRewardsCard extends LitElement {
       .reward-details {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: var(--chm-reward-details-gap, 6px);
         flex: 1;
         min-width: 0;
         padding-top: 4px;
       }
 
       .reward-name {
-        font-size: 1.15rem;
+        font-size: var(--chm-reward-name-font-size, 1.15rem);
         font-weight: 600;
         color: var(--text-primary);
         line-height: 1.3;
       }
 
       .reward-description {
-        font-size: 0.9rem;
+        font-size: var(--chm-reward-desc-font-size, 0.9rem);
         color: var(--text-secondary);
         line-height: 1.4;
       }
@@ -217,7 +220,7 @@ class ChoremanderRewardsCard extends LitElement {
 
       .progress-bar {
         flex: 1;
-        height: 14px;
+        height: var(--chm-progress-height, 14px);
         background: rgba(0, 0, 0, 0.08);
         border-radius: 7px;
         overflow: hidden;
@@ -257,11 +260,11 @@ class ChoremanderRewardsCard extends LitElement {
       }
 
       .progress-text {
-        font-size: 0.85rem;
+        font-size: var(--chm-progress-text-font-size, 0.85rem);
         font-weight: 600;
         color: var(--text-secondary);
         white-space: nowrap;
-        min-width: 70px;
+        min-width: var(--chm-progress-text-min-width, 70px);
         text-align: right;
       }
 
@@ -340,7 +343,7 @@ class ChoremanderRewardsCard extends LitElement {
       /* Multi-child progress bar for jackpot */
       .jackpot-progress-bar {
         flex: 1;
-        height: 18px;
+        height: var(--chm-jackpot-progress-height, 18px);
         background: rgba(0, 0, 0, 0.08);
         border-radius: 9px;
         overflow: hidden;
@@ -470,8 +473,8 @@ class ChoremanderRewardsCard extends LitElement {
 
       /* Reward icon (if available) */
       .reward-icon-container {
-        width: 44px;
-        height: 44px;
+        width: var(--chm-reward-icon-size, 44px);
+        height: var(--chm-reward-icon-size, 44px);
         border-radius: 50%;
         background: linear-gradient(135deg, var(--reward-purple) 0%, var(--reward-purple-light) 100%);
         display: flex;
@@ -481,7 +484,7 @@ class ChoremanderRewardsCard extends LitElement {
       }
 
       .reward-icon-container ha-icon {
-        --mdc-icon-size: 24px;
+        --mdc-icon-size: var(--chm-reward-icon-glyph-size, 24px);
         color: white;
       }
 
@@ -573,54 +576,173 @@ class ChoremanderRewardsCard extends LitElement {
         margin-bottom: 16px;
       }
 
+      /* ---------------------------------------------------------------- *
+       * Density presets
+       *
+       * Same contract as the child card: every size above is written as
+       * var(--chm-token, <the literal this card shipped with>) and nothing
+       * defines those tokens on :host, so a card with no density option
+       * resolves all of them to their fallbacks and renders unchanged.
+       * Setting a token here also overrides the max-width: 400px block,
+       * because that block reads the same tokens.
+       * ---------------------------------------------------------------- */
+
+      :host([density="cozy"]) {
+        --chm-header-padding: 12px 16px;
+        --chm-header-icon-size: 26px;
+        --chm-header-title-font-size: 1.15rem;
+        --chm-content-padding: 12px;
+        --chm-content-gap: 9px;
+        --chm-reward-padding: 12px;
+        --chm-reward-gap: 12px;
+        --chm-reward-radius: 11px;
+        --chm-cost-badge-min-width: 58px;
+        --chm-cost-badge-padding: 9px 7px;
+        --chm-cost-badge-radius: 10px;
+        --chm-cost-badge-icon-size: 20px;
+        --chm-cost-value-font-size: 1.2rem;
+        --chm-cost-label-font-size: 0.6rem;
+        --chm-reward-details-gap: 4px;
+        --chm-reward-name-font-size: 1.05rem;
+        --chm-reward-desc-font-size: 0.85rem;
+        --chm-progress-height: 12px;
+        --chm-jackpot-progress-height: 15px;
+        --chm-progress-text-font-size: 0.8rem;
+        --chm-progress-text-min-width: 62px;
+        --chm-reward-icon-size: 38px;
+        --chm-reward-icon-glyph-size: 21px;
+      }
+
+      /*
+       * The claim button is the one thing compact does not shrink below a
+       * finger: it stays at 34px with the row's own padding around it, which
+       * keeps the hit area past the 44px minimum.
+       */
+      :host([density="compact"]) {
+        --chm-header-padding: 8px 12px;
+        --chm-header-icon-size: 22px;
+        --chm-header-title-font-size: 1rem;
+        --chm-content-padding: 8px;
+        --chm-content-gap: 6px;
+        --chm-reward-padding: 8px 10px;
+        --chm-reward-gap: 10px;
+        --chm-reward-radius: 9px;
+        --chm-cost-badge-min-width: 46px;
+        --chm-cost-badge-padding: 6px 5px;
+        --chm-cost-badge-radius: 8px;
+        --chm-cost-badge-icon-size: 15px;
+        --chm-cost-value-font-size: 1rem;
+        --chm-cost-label-font-size: 0.5rem;
+        --chm-reward-details-gap: 3px;
+        --chm-reward-name-font-size: 0.95rem;
+        --chm-reward-desc-font-size: 0.78rem;
+        --chm-progress-height: 9px;
+        --chm-jackpot-progress-height: 11px;
+        --chm-progress-text-font-size: 0.72rem;
+        --chm-progress-text-min-width: 52px;
+        --chm-reward-icon-size: 34px;
+        --chm-reward-icon-glyph-size: 19px;
+      }
+
+      /*
+       * The cost badge stacks an icon over the number over the word STARS.
+       * At compact widths the icon is the first thing that stops earning its
+       * space, and dropping it is what lets the badge shrink to 46px without
+       * the number wrapping.
+       */
+      :host([density="compact"]) .cost-badge ha-icon {
+        display: none;
+      }
+
+      :host([density="compact"]) .jackpot-breakdown,
+      :host([density="compact"]) .assigned-children {
+        font-size: 0.7rem;
+        gap: 4px;
+      }
+
+      /* ---------------------------------------------------------------- *
+       * Motion
+       *
+       * Only the idle loops - the progress shimmer and the jackpot shine.
+       * The claim celebration is feedback for something the child just did
+       * and is left alone.
+       * ---------------------------------------------------------------- */
+
+      :host([no-animations]) .progress-fill::after,
+      :host([no-animations]) .jackpot-segment::after,
+      :host([no-animations]) .reward-row.jackpot::before {
+        animation: none;
+        opacity: 0;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .progress-fill::after,
+        .jackpot-segment::after,
+        .reward-row.jackpot::before {
+          animation: none;
+          opacity: 0;
+        }
+
+        .progress-fill,
+        .jackpot-segment,
+        .reward-row,
+        .reward-claim-button {
+          transition: none;
+        }
+
+        .celebration-content {
+          animation: fade-in 0.2s ease;
+        }
+      }
+
       /* Responsive adjustments */
       @media (max-width: 400px) {
         .card-header {
-          padding: 14px 16px;
+          padding: var(--chm-header-padding, 14px 16px);
         }
 
         .header-title {
-          font-size: 1.15rem;
+          font-size: var(--chm-header-title-font-size, 1.15rem);
         }
 
         .card-content {
-          padding: 12px;
-          gap: 10px;
+          padding: var(--chm-content-padding, 12px);
+          gap: var(--chm-content-gap, 10px);
         }
 
         .reward-row {
-          padding: 12px;
-          gap: 12px;
+          padding: var(--chm-reward-padding, 12px);
+          gap: var(--chm-reward-gap, 12px);
         }
 
         .cost-badge {
-          min-width: 60px;
-          padding: 10px 6px;
+          min-width: var(--chm-cost-badge-min-width, 60px);
+          padding: var(--chm-cost-badge-padding, 10px 6px);
         }
 
         .cost-badge ha-icon {
-          --mdc-icon-size: 20px;
+          --mdc-icon-size: var(--chm-cost-badge-icon-size, 20px);
         }
 
         .cost-value {
-          font-size: 1.2rem;
+          font-size: var(--chm-cost-value-font-size, 1.2rem);
         }
 
         .reward-name {
-          font-size: 1.05rem;
+          font-size: var(--chm-reward-name-font-size, 1.05rem);
         }
 
         .reward-description {
-          font-size: 0.85rem;
+          font-size: var(--chm-reward-desc-font-size, 0.85rem);
         }
 
         .reward-icon-container {
-          width: 38px;
-          height: 38px;
+          width: var(--chm-reward-icon-size, 38px);
+          height: var(--chm-reward-icon-size, 38px);
         }
 
         .reward-icon-container ha-icon {
-          --mdc-icon-size: 20px;
+          --mdc-icon-size: var(--chm-reward-icon-glyph-size, 20px);
         }
       }
 
@@ -904,12 +1026,55 @@ class ChoremanderRewardsCard extends LitElement {
       child_id: null, // Optional: filter rewards for a specific child
       show_child_badges: true, // Show which children can claim each reward
       claim_sound: "fanfare", // "none" to silence, or any fartN / fart_random
+      density: "default", // "default" | "cozy" | "compact"
+      animations: true, // Ambient shimmer; the claim celebration is unaffected
       ...config,
     };
+
+    if (!ChoremanderRewardsCard.DENSITIES.includes(this.config.density)) {
+      // Coerce rather than throw - one mistyped option should not replace the
+      // whole reward list with an error card.
+      console.warn(
+        `[Choremander] Unknown density "${this.config.density}". ` +
+        `Expected one of ${ChoremanderRewardsCard.DENSITIES.join(", ")}. Falling back to "default".`
+      );
+      this.config = { ...this.config, density: "default" };
+    }
+
+    this._syncLayoutAttributes();
+  }
+
+  /**
+   * Mirror the layout options onto the host, which is what the :host([...])
+   * rules select on. Attributes are removed at their default rather than set
+   * to "default", so a card that never opted in matches none of those rules.
+   */
+  _syncLayoutAttributes() {
+    if (!this.config) return;
+
+    if (this.config.density && this.config.density !== "default") {
+      this.setAttribute("density", this.config.density);
+    } else {
+      this.removeAttribute("density");
+    }
+
+    if (this.config.animations === false) {
+      this.setAttribute("no-animations", "");
+    } else {
+      this.removeAttribute("no-animations");
+    }
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    // setConfig can run before the element is in the document, and Lovelace
+    // reuses card elements across view switches, so re-assert on connect.
+    this._syncLayoutAttributes();
   }
 
   getCardSize() {
-    return 3;
+    const sizes = { default: 3, cozy: 2, compact: 2 };
+    return sizes[this.config?.density] ?? 3;
   }
 
   static getConfigElement() {
@@ -1683,6 +1848,17 @@ class ChoremanderRewardsCardEditor extends LitElement {
         color: var(--secondary-text-color);
         font-size: 0.85em;
       }
+
+      .section-heading {
+        margin: 24px 0 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--divider-color);
+        font-weight: 600;
+        color: var(--secondary-text-color);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.8em;
+      }
     `;
   }
 
@@ -1748,7 +1924,41 @@ class ChoremanderRewardsCardEditor extends LitElement {
         </label>
         <small>Display which children can claim each reward</small>
       </div>
+
+      <div class="section-heading">Layout</div>
+
+      <div class="form-group">
+        <label>Density</label>
+        <select @change="${this._densityChanged}">
+          <option value="default" ?selected="${(this.config.density || "default") === "default"}">
+            Default
+          </option>
+          <option value="cozy" ?selected="${this.config.density === "cozy"}">
+            Cozy — a bit tighter
+          </option>
+          <option value="compact" ?selected="${this.config.density === "compact"}">
+            Compact — fits more rewards on screen
+          </option>
+        </select>
+        <small>How much space each reward takes up. Claim buttons stay finger-sized.</small>
+      </div>
+
+      <div class="form-group">
+        <label>
+          <input
+            type="checkbox"
+            ?checked="${this.config.animations !== false}"
+            @change="${(e) => this._updateConfig("animations", e.target.checked)}"
+          />
+          Background animations
+        </label>
+        <small>The progress shimmer and jackpot shine. Celebrations still play.</small>
+      </div>
     `;
+  }
+
+  _densityChanged(e) {
+    this._updateConfig("density", e.target.value);
   }
 
   _entityChanged(e) {
@@ -1768,9 +1978,16 @@ class ChoremanderRewardsCardEditor extends LitElement {
     this._updateConfig("show_child_badges", e.target.checked);
   }
 
+  /** Values the card already assumes; writing them down would just add noise. */
+  static LAYOUT_DEFAULTS = {
+    density: "default",
+    animations: true,
+  };
+
   _updateConfig(key, value) {
     const newConfig = { ...this.config, [key]: value };
-    if (value === undefined || value === "" || value === null) {
+    const isDefault = ChoremanderRewardsCardEditor.LAYOUT_DEFAULTS[key] === value;
+    if (value === undefined || value === "" || value === null || isDefault) {
       delete newConfig[key];
     }
     const event = new CustomEvent("config-changed", {

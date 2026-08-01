@@ -170,7 +170,29 @@ entity: sensor.choremander_overview
 child_id: a8c8376a
 time_category: morning  # Optional: morning, afternoon, evening, night, anytime
 title: My Chores        # Optional
+density: compact        # Optional: default, cozy, compact
+show_header: false      # Optional: hide the avatar / name / balance strip
 ```
+</details>
+
+<details>
+<summary>Layout options</summary>
+
+| Option | Values | Default | What it does |
+|---|---|---|---|
+| `density` | `default`, `cozy`, `compact` | `default` | How much space each chore takes. `compact` fits roughly twice as many chores on a phone screen. |
+| `show_header` | bool | `true` | The avatar, name and star balance across the top. Turn off if you show the balance elsewhere. |
+| `show_avatar` | bool | `true` | Just the round avatar. |
+| `show_title` | bool | `true` | The "Morning Chores" heading. |
+| `show_numbers` | bool | `true` | The coloured number badge on each chore. |
+| `show_chore_points` | bool | `true` | The star value under each chore name. |
+| `animations` | bool | `true` | The floating avatar and spinning stars. Celebrations still play. |
+
+Tap targets do not shrink with density: a chore row stays at least 56px tall
+and the checkbox at least 40px at every setting, because the whole row is the
+button and it is a small child doing the tapping. The card also honours your
+operating system's "reduce motion" setting on its own.
+
 </details>
 
 #### Rewards Card
@@ -186,6 +208,8 @@ Shows all available rewards with progress bars. Displays dynamic pricing indicat
 type: custom:choremander-rewards-card
 entity: sensor.choremander_overview
 child_id: 6ddfca70  # Optional: filter to specific child
+density: compact    # Optional: default, cozy, compact
+animations: false   # Optional: stop the shimmer and jackpot shine
 ```
 </details>
 
@@ -246,6 +270,78 @@ child_id: a8c8376a
 ---
 
 > **Note:** All cards require the `sensor.choremander_overview` entity. Child-specific cards also need a child selection.
+
+---
+
+### Custom Styling
+
+If `density` does not get you where you want, the Child Card and Rewards Card
+expose every size as a CSS custom property. Set one anywhere above the card - a
+Home Assistant theme, or a `card_mod` block on a single card - and it wins over
+the built-in value.
+
+```yaml
+# In your theme, applying to every Choremander card at once
+my_theme:
+  chm-chore-min-height: 48px
+  chm-chore-name-font-size: 1rem
+  chm-card-background: "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)"
+```
+
+```yaml
+# Or with card_mod, on one card only
+type: custom:choremander-child-card
+entity: sensor.choremander_overview
+child_id: a8c8376a
+card_mod:
+  style: |
+    :host {
+      --chm-chore-radius: 4px;
+      --chm-color-purple: #e91e63;
+    }
+```
+
+<details>
+<summary>Child Card properties</summary>
+
+| Property | Default |
+|---|---|
+| `--chm-card-background` | `linear-gradient(135deg, #667eea 0%, #764ba2 100%)` |
+| `--chm-card-radius` | `24px` |
+| `--chm-header-padding` | `20px 24px` |
+| `--chm-avatar-size` / `--chm-avatar-icon-size` | `70px` / `50px` |
+| `--chm-name-font-size` | `clamp(1.2rem, 5vw, 2rem)` |
+| `--chm-balance-padding` / `--chm-balance-radius` | `12px 16px` / `20px` |
+| `--chm-chores-padding` / `--chm-chores-gap` / `--chm-chores-min-height` | `24px` / `20px` / `200px` |
+| `--chm-title-font-size` / `--chm-title-icon-size` | `1.8rem` / `36px` |
+| `--chm-chore-padding` / `--chm-chore-min-height` | `20px 24px` / `80px` |
+| `--chm-chore-radius` / `--chm-chore-border-width` | `24px` / `4px` |
+| `--chm-chore-name-font-size` / `--chm-chore-points-font-size` | `1.5rem` / `1.2rem` |
+| `--chm-badge-size` / `--chm-badge-font-size` | `42px` / `1.5rem` |
+| `--chm-checkbox-size` / `--chm-checkbox-icon-size` | `44px` / `28px` |
+| `--chm-color-pink`, `-purple`, `-blue`, `-green`, `-yellow`, `-orange`, `-red`, `-cyan` | the built-in palette |
+
+</details>
+
+<details>
+<summary>Rewards Card properties</summary>
+
+| Property | Default |
+|---|---|
+| `--chm-header-padding` / `--chm-header-title-font-size` | `16px 20px` / `1.3rem` |
+| `--chm-content-padding` / `--chm-content-gap` | `16px` / `12px` |
+| `--chm-reward-padding` / `--chm-reward-gap` / `--chm-reward-radius` | `16px` / `16px` / `12px` |
+| `--chm-cost-badge-min-width` / `--chm-cost-badge-padding` | `70px` / `12px 8px` |
+| `--chm-cost-value-font-size` / `--chm-cost-label-font-size` | `1.4rem` / `0.65rem` |
+| `--chm-reward-name-font-size` / `--chm-reward-desc-font-size` | `1.15rem` / `0.9rem` |
+| `--chm-progress-height` / `--chm-jackpot-progress-height` | `14px` / `18px` |
+| `--chm-reward-icon-size` / `--chm-reward-icon-glyph-size` | `44px` / `24px` |
+
+</details>
+
+If you set both, the `density` option wins - it is the more specific instruction.
+To restyle a card that also uses a density, target `:host([density="compact"])`
+in your `card_mod` block.
 
 ---
 

@@ -7,7 +7,7 @@ each catching things the others cannot.
 |---|---|---|---|---|
 | **Unit** | `tests/unit/` | 347 | No | The Python logic is correct — pricing math, storage, config flow, entity state |
 | **API end-to-end** | `tests/e2e/` | 13 | Yes | Real service calls against real Home Assistant move real state |
-| **Browser end-to-end** | `e2e/` | 18 | Yes | The Lovelace cards actually work when a person clicks them |
+| **Browser end-to-end** | `e2e/` | 30 | Yes | The Lovelace cards actually work when a person clicks them |
 
 Unit coverage is 97% of the integration, with `coordinator.py` — the dynamic
 reward pricing — at 100%.
@@ -48,6 +48,13 @@ gitignored and regenerated on demand.
 ### Seeded fixture data
 
 2 children (Krishna 25, Radha 15), 8 chores, 5 rewards.
+
+Radha's dashboard carries three views that differ only in card configuration:
+`/radha` at the default density, `/radha/compact` as a card-for-card mirror of
+it with `density: compact`, and `/radha/layout` holding `cozy` plus a card with
+every visibility toggle turned off. Keeping the first two identical apart from
+that one key is what lets `card-layout.spec.ts` compare their geometry and
+attribute the difference to the option rather than to the content.
 
 **`dev/fixtures/` is the fixture of record**, not `dev/config/.storage/`. Home
 Assistant rewrites everything under `.storage/` while it runs, so that directory
@@ -136,6 +143,13 @@ Two traps worth knowing:
   the cheapest reward is 50). A spec that exercises claiming has to call
   `grantPoints()` first. `e2e/specs/rewards-card.spec.ts` documents the running
   balance each of its tests assumes.
+- **`rem` resolves against 14px, not 16px.** Home Assistant sets its own root
+  font size, so a rule written as `1.7rem` computes to `23.8px`. Any assertion
+  on a computed font size has to use that scale.
+- **Playwright's default viewport is 1280x720**, which lands inside the child
+  card's `(min-width: 1024px)` block *and* its `(max-height: 600px)` block is
+  just missed. A spec asserting on sizes should set its own viewport rather
+  than inherit one and silently test a different breakpoint than it reads like.
 
 ## Known defects
 
@@ -162,6 +176,7 @@ test-visible change. Tests that pin a bug are marked:
 | 11 | No server-side assignment check: any child can complete any chore and claim any reward |
 | 12 | There is no `reject_reward` service, so a parent cannot deny a reward claim once made |
 | 13 | A jackpot pools every child's points in its progress bar, but `claim_reward` charges one child, so a jackpot is only claimable once a single child holds the whole cost alone. The card gates on the rule the backend enforces rather than on the pooled total |
+| 14 | The child card's breakpoints read the **viewport** width, so a card in a narrow masonry column on a wide screen gets the large-screen sizes and its chore names wrap to three lines. The `min-width: 1024px` block makes the card *bigger*, which is most of ["huge on a tablet"](https://github.com/vinnybad/choremander/issues/4). Fixing it properly means container queries, which would change how every existing dashboard renders, so `density` sidesteps it instead: the presets set one size that overrides every breakpoint at once |
 
 Three further defects were found and **fixed** while building this suite:
 

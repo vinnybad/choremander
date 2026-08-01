@@ -3,10 +3,14 @@
  * A FUN, kid-friendly Lovelace card for completing chores!
  * Designed for children ages 5-10 with big buttons, bright colors, and celebrations!
  *
- * Version: 0.0.1 - Checkbox-style completion
- * Last Updated: 2026-01-01
+ * Version: 0.0.2 - Density options and themeable sizing
+ * Last Updated: 2026-08-01
  *
  * Features:
+ * - `density` option: default | cozy | compact
+ * - Visibility toggles for the header, avatar, heading, numbers and points
+ * - Every size exposed as a --chm-* custom property for themes and card-mod
+ * - Honours prefers-reduced-motion
  * - Fun synthesized completion sounds (coin, levelup, fanfare, chime, powerup, undo)
  * - No external sound files needed - all sounds generated via Web Audio API
  * - Per-chore sound configuration
@@ -23,6 +27,9 @@ const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
 
 class ChoremanderChildCard extends LitElement {
+  /** Accepted values for the `density` option, loosest first. */
+  static DENSITIES = ["default", "cozy", "compact"];
+
   static get properties() {
     return {
       hass: { type: Object },
@@ -400,22 +407,40 @@ class ChoremanderChildCard extends LitElement {
 
   static get styles() {
     return css`
+      /*
+       * Sizing is expressed as var(--chm-*, <literal>) throughout, and the
+       * literal is always exactly what this card shipped with. Nothing defines
+       * these tokens on :host, so an untouched card resolves every one of them
+       * to its fallback and renders byte-for-byte as it always has.
+       *
+       * That leaves three ways to make the card smaller, in order of effort:
+       * the density option (presets below), a theme or card-mod rule setting
+       * individual --chm-* tokens, or both. Card config wins over a theme,
+       * because :host([density=...]) is an own property and a theme value is
+       * inherited.
+       *
+       * The --fun-* palette is indirected through --chm-color-* for the same
+       * reason: as literals they could not be recoloured from a theme at all.
+       */
       :host {
         display: block;
-        --fun-pink: #ff6b9d;
-        --fun-purple: #9b59b6;
-        --fun-blue: #3498db;
-        --fun-green: #2ecc71;
-        --fun-yellow: #f1c40f;
-        --fun-orange: #e67e22;
-        --fun-red: #e74c3c;
-        --fun-cyan: #1abc9c;
+        --fun-pink: var(--chm-color-pink, #ff6b9d);
+        --fun-purple: var(--chm-color-purple, #9b59b6);
+        --fun-blue: var(--chm-color-blue, #3498db);
+        --fun-green: var(--chm-color-green, #2ecc71);
+        --fun-yellow: var(--chm-color-yellow, #f1c40f);
+        --fun-orange: var(--chm-color-orange, #e67e22);
+        --fun-red: var(--chm-color-red, #e74c3c);
+        --fun-cyan: var(--chm-color-cyan, #1abc9c);
       }
 
       ha-card {
         overflow: hidden;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 24px;
+        background: var(
+          --chm-card-background,
+          linear-gradient(135deg, #667eea 0%, #764ba2 100%)
+        );
+        border-radius: var(--chm-card-radius, 24px);
         padding: 0;
       }
 
@@ -424,25 +449,25 @@ class ChoremanderChildCard extends LitElement {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 20px 24px;
+        padding: var(--chm-header-padding, 20px 24px);
         background: rgba(255, 255, 255, 0.15);
         backdrop-filter: blur(10px);
-        gap: 12px;
+        gap: var(--chm-header-gap, 12px);
         min-width: 0;
       }
 
       .child-info {
         display: flex;
         align-items: center;
-        gap: 16px;
+        gap: var(--chm-child-info-gap, 16px);
         min-width: 0;
         flex-shrink: 1;
       }
 
       .avatar-container {
         position: relative;
-        width: 70px;
-        height: 70px;
+        width: var(--chm-avatar-size, 70px);
+        height: var(--chm-avatar-size, 70px);
         border-radius: 50%;
         background: white;
         display: flex;
@@ -458,7 +483,7 @@ class ChoremanderChildCard extends LitElement {
       }
 
       .avatar-container ha-icon {
-        --mdc-icon-size: 50px;
+        --mdc-icon-size: var(--chm-avatar-icon-size, 50px);
         color: var(--fun-purple);
       }
 
@@ -469,7 +494,7 @@ class ChoremanderChildCard extends LitElement {
       }
 
       .child-name {
-        font-size: clamp(1.2rem, 5vw, 2rem);
+        font-size: var(--chm-name-font-size, clamp(1.2rem, 5vw, 2rem));
         font-weight: bold;
         color: white;
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
@@ -484,8 +509,8 @@ class ChoremanderChildCard extends LitElement {
         flex-direction: column;
         align-items: center;
         background: white;
-        padding: 12px 16px;
-        border-radius: 20px;
+        padding: var(--chm-balance-padding, 12px 16px);
+        border-radius: var(--chm-balance-radius, 20px);
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         min-width: 0;
         max-width: 45%;
@@ -510,7 +535,7 @@ class ChoremanderChildCard extends LitElement {
       }
 
       .stars-value {
-        font-size: clamp(1rem, 4vw, 1.8rem);
+        font-size: var(--chm-balance-font-size, clamp(1rem, 4vw, 1.8rem));
         font-weight: bold;
         line-height: 1;
         display: flex;
@@ -530,7 +555,7 @@ class ChoremanderChildCard extends LitElement {
       }
 
       .stars-value ha-icon {
-        --mdc-icon-size: clamp(16px, 4vw, 24px);
+        --mdc-icon-size: var(--chm-balance-icon-size, clamp(16px, 4vw, 24px));
         flex-shrink: 0;
       }
 
@@ -583,44 +608,44 @@ class ChoremanderChildCard extends LitElement {
 
       /* Chores container */
       .chores-container {
-        padding: 24px;
+        padding: var(--chm-chores-padding, 24px);
         display: flex;
         flex-direction: column;
-        gap: 20px;
+        gap: var(--chm-chores-gap, 20px);
         background: rgba(255, 255, 255, 0.95);
-        min-height: 200px;
+        min-height: var(--chm-chores-min-height, 200px);
       }
 
       .section-title {
-        font-size: 1.8rem;
+        font-size: var(--chm-title-font-size, 1.8rem);
         font-weight: bold;
         color: var(--fun-purple);
         display: flex;
         align-items: center;
-        gap: 12px;
-        margin-bottom: 12px;
-        padding: 8px 0;
+        gap: var(--chm-title-gap, 12px);
+        margin-bottom: var(--chm-title-margin, 12px);
+        padding: var(--chm-title-padding, 8px 0);
       }
 
       .section-title ha-icon {
-        --mdc-icon-size: 36px;
+        --mdc-icon-size: var(--chm-title-icon-size, 36px);
       }
 
       /* Individual chore card - optimized for tablet touch, ENTIRE ROW IS CLICKABLE */
       .chore-card {
         background: white;
-        border-radius: 24px;
-        padding: 20px 24px;
+        border-radius: var(--chm-chore-radius, 24px);
+        padding: var(--chm-chore-padding, 20px 24px);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 16px;
+        gap: var(--chm-chore-gap, 16px);
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-        border: 4px solid transparent;
+        border: var(--chm-chore-border-width, 4px) solid transparent;
         transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
         position: relative;
         overflow: hidden;
-        min-height: 80px;
+        min-height: var(--chm-chore-min-height, 80px);
         /* Prevent text selection on touch */
         -webkit-user-select: none;
         user-select: none;
@@ -681,8 +706,9 @@ class ChoremanderChildCard extends LitElement {
       .chore-info {
         display: flex;
         align-items: center;
-        gap: 16px;
+        gap: var(--chm-chore-info-gap, 16px);
         flex: 1;
+        min-width: 0;
       }
 
       /* Chore number wrapper (icon removed) */
@@ -695,14 +721,14 @@ class ChoremanderChildCard extends LitElement {
 
       /* Fun chore number badge */
       .chore-number-badge {
-        width: 42px;
-        height: 42px;
-        min-width: 42px;
+        width: var(--chm-badge-size, 42px);
+        height: var(--chm-badge-size, 42px);
+        min-width: var(--chm-badge-size, 42px);
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.5rem;
+        font-size: var(--chm-badge-font-size, 1.5rem);
         font-weight: 800;
         color: white;
         text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
@@ -734,10 +760,10 @@ class ChoremanderChildCard extends LitElement {
 
       /* Checkbox for chore completion */
       .chore-checkbox {
-        width: 44px;
-        height: 44px;
-        min-width: 44px;
-        border-radius: 12px;
+        width: var(--chm-checkbox-size, 44px);
+        height: var(--chm-checkbox-size, 44px);
+        min-width: var(--chm-checkbox-size, 44px);
+        border-radius: var(--chm-checkbox-radius, 12px);
         border: 3px solid #bdc3c7;
         background: white;
         display: flex;
@@ -749,7 +775,7 @@ class ChoremanderChildCard extends LitElement {
       }
 
       .chore-checkbox ha-icon {
-        --mdc-icon-size: 28px;
+        --mdc-icon-size: var(--chm-checkbox-icon-size, 28px);
         color: transparent;
         transition: all 0.2s ease;
       }
@@ -774,13 +800,13 @@ class ChoremanderChildCard extends LitElement {
       .chore-details {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: var(--chm-chore-details-gap, 6px);
         flex: 1;
         min-width: 0; /* Allow text truncation */
       }
 
       .chore-name {
-        font-size: 1.5rem;
+        font-size: var(--chm-chore-name-font-size, 1.5rem);
         font-weight: bold;
         color: #333;
         line-height: 1.2;
@@ -790,13 +816,13 @@ class ChoremanderChildCard extends LitElement {
         display: flex;
         align-items: center;
         gap: 8px;
-        font-size: 1.2rem;
+        font-size: var(--chm-chore-points-font-size, 1.2rem);
         color: var(--fun-orange);
         font-weight: 600;
       }
 
       .chore-points ha-icon {
-        --mdc-icon-size: 24px;
+        --mdc-icon-size: var(--chm-chore-points-icon-size, 24px);
         color: var(--fun-yellow);
       }
 
@@ -835,12 +861,12 @@ class ChoremanderChildCard extends LitElement {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 40px 20px;
+        padding: var(--chm-empty-padding, 40px 20px);
         text-align: center;
       }
 
       .empty-state ha-icon {
-        --mdc-icon-size: 80px;
+        --mdc-icon-size: var(--chm-empty-icon-size, 80px);
         color: var(--fun-green);
         margin-bottom: 16px;
         animation: bounce 1s ease infinite;
@@ -989,14 +1015,24 @@ class ChoremanderChildCard extends LitElement {
         margin-bottom: 16px;
       }
 
-      /* Tablet-first responsive design */
+      /*
+       * Tablet-first responsive design.
+       *
+       * These breakpoints look at the VIEWPORT, not at how wide this card
+       * actually is, so a card sitting in a narrow masonry column on a wide
+       * screen gets the large-screen sizes. That is why the literals here are
+       * behind the same tokens as the base rules: setting a token once collapses
+       * every breakpoint to a single size, which is what the density presets do.
+       * Untouched, each block still resolves to the value it always had.
+       */
+
       /* Portrait tablets and phones */
       @media (max-width: 600px) {
         .card-header {
           flex-direction: column;
           gap: 16px;
           text-align: center;
-          padding: 24px 20px;
+          padding: var(--chm-header-padding, 24px 20px);
         }
 
         .child-info {
@@ -1004,12 +1040,12 @@ class ChoremanderChildCard extends LitElement {
         }
 
         .chores-container {
-          padding: 24px 16px;
-          gap: 20px;
+          padding: var(--chm-chores-padding, 24px 16px);
+          gap: var(--chm-chores-gap, 20px);
         }
 
         .chore-card {
-          padding: 16px 18px;
+          padding: var(--chm-chore-padding, 16px 18px);
           flex-wrap: wrap;
         }
 
@@ -1023,57 +1059,57 @@ class ChoremanderChildCard extends LitElement {
         }
 
         .chore-number-badge {
-          width: 36px;
-          height: 36px;
-          min-width: 36px;
-          font-size: 1.3rem;
+          width: var(--chm-badge-size, 36px);
+          height: var(--chm-badge-size, 36px);
+          min-width: var(--chm-badge-size, 36px);
+          font-size: var(--chm-badge-font-size, 1.3rem);
         }
 
         .chore-checkbox {
-          width: 40px;
-          height: 40px;
-          min-width: 40px;
+          width: var(--chm-checkbox-size, 40px);
+          height: var(--chm-checkbox-size, 40px);
+          min-width: var(--chm-checkbox-size, 40px);
         }
 
         .chore-checkbox ha-icon {
-          --mdc-icon-size: 24px;
+          --mdc-icon-size: var(--chm-checkbox-icon-size, 24px);
         }
 
         .chore-name {
-          font-size: 1.3rem;
+          font-size: var(--chm-chore-name-font-size, 1.3rem);
         }
       }
 
       /* Landscape tablets - ensure side-by-side layout */
       @media (min-width: 601px) and (max-height: 600px) {
         .chore-card {
-          padding: 16px 20px;
+          padding: var(--chm-chore-padding, 16px 20px);
         }
 
         .chore-checkbox {
-          width: 42px;
-          height: 42px;
-          min-width: 42px;
+          width: var(--chm-checkbox-size, 42px);
+          height: var(--chm-checkbox-size, 42px);
+          min-width: var(--chm-checkbox-size, 42px);
         }
       }
 
       /* Large tablets (iPad Pro, etc.) */
       @media (min-width: 1024px) {
         .card-header {
-          padding: 24px 32px;
+          padding: var(--chm-header-padding, 24px 32px);
         }
 
         .chores-container {
-          padding: 28px;
-          gap: 20px;
+          padding: var(--chm-chores-padding, 28px);
+          gap: var(--chm-chores-gap, 20px);
         }
 
         .section-title {
-          font-size: 2rem;
+          font-size: var(--chm-title-font-size, 2rem);
         }
 
         .chore-card {
-          padding: 24px 28px;
+          padding: var(--chm-chore-padding, 24px 28px);
         }
 
         .chore-number-wrapper {
@@ -1081,29 +1117,221 @@ class ChoremanderChildCard extends LitElement {
         }
 
         .chore-number-badge {
-          width: 48px;
-          height: 48px;
-          min-width: 48px;
-          font-size: 1.7rem;
+          width: var(--chm-badge-size, 48px);
+          height: var(--chm-badge-size, 48px);
+          min-width: var(--chm-badge-size, 48px);
+          font-size: var(--chm-badge-font-size, 1.7rem);
         }
 
         .chore-checkbox {
-          width: 50px;
-          height: 50px;
-          min-width: 50px;
-          border-radius: 14px;
+          width: var(--chm-checkbox-size, 50px);
+          height: var(--chm-checkbox-size, 50px);
+          min-width: var(--chm-checkbox-size, 50px);
+          border-radius: var(--chm-checkbox-radius, 14px);
         }
 
         .chore-checkbox ha-icon {
-          --mdc-icon-size: 32px;
+          --mdc-icon-size: var(--chm-checkbox-icon-size, 32px);
         }
 
         .chore-name {
-          font-size: 1.7rem;
+          font-size: var(--chm-chore-name-font-size, 1.7rem);
         }
 
         .chore-points {
-          font-size: 1.4rem;
+          font-size: var(--chm-chore-points-font-size, 1.4rem);
+        }
+      }
+
+      /* ---------------------------------------------------------------- *
+       * Density presets
+       *
+       * Each block only sets tokens, so it needs no knowledge of which
+       * breakpoint is active - a token beats every fallback at once.
+       * ---------------------------------------------------------------- */
+
+      /* Cozy: noticeably tighter, still unmistakably the same card. */
+      :host([density="cozy"]) {
+        --chm-card-radius: 18px;
+        --chm-header-padding: 14px 18px;
+        --chm-child-info-gap: 12px;
+        --chm-avatar-size: 54px;
+        --chm-avatar-icon-size: 38px;
+        --chm-name-font-size: clamp(1.1rem, 4vw, 1.5rem);
+        --chm-balance-padding: 9px 12px;
+        --chm-balance-radius: 16px;
+        --chm-balance-font-size: clamp(0.95rem, 3.5vw, 1.4rem);
+        --chm-chores-padding: 16px;
+        --chm-chores-gap: 12px;
+        --chm-chores-min-height: 0;
+        --chm-title-font-size: 1.35rem;
+        --chm-title-icon-size: 26px;
+        --chm-title-gap: 10px;
+        --chm-title-margin: 6px;
+        --chm-title-padding: 2px 0;
+        --chm-chore-padding: 12px 16px;
+        --chm-chore-min-height: 66px;
+        --chm-chore-radius: 18px;
+        --chm-chore-border-width: 3px;
+        --chm-chore-gap: 12px;
+        --chm-chore-info-gap: 12px;
+        --chm-chore-details-gap: 4px;
+        --chm-badge-size: 34px;
+        --chm-badge-font-size: 1.2rem;
+        --chm-checkbox-size: 42px;
+        --chm-checkbox-icon-size: 24px;
+        --chm-checkbox-radius: 10px;
+        --chm-chore-name-font-size: 1.2rem;
+        --chm-chore-points-font-size: 1rem;
+        --chm-chore-points-icon-size: 20px;
+        --chm-empty-padding: 24px 16px;
+        --chm-empty-icon-size: 52px;
+      }
+
+      /*
+       * Compact: about half the vertical space per chore. The floors matter
+       * more than the reductions - the whole row is the tap target and the
+       * people tapping it are five, so the row stays at 56px (comfortably past
+       * the 44px WCAG 2.5.5 / Apple HIG minimum) and the chore name stays at
+       * 1.05rem, which is still larger than Home Assistant's own body text.
+       */
+      :host([density="compact"]) {
+        --chm-card-radius: 14px;
+        --chm-header-padding: 10px 14px;
+        --chm-child-info-gap: 10px;
+        --chm-avatar-size: 40px;
+        --chm-avatar-icon-size: 26px;
+        --chm-name-font-size: clamp(1rem, 3.5vw, 1.25rem);
+        --chm-balance-padding: 6px 10px;
+        --chm-balance-radius: 12px;
+        --chm-balance-font-size: clamp(0.9rem, 3vw, 1.15rem);
+        --chm-balance-icon-size: 16px;
+        --chm-chores-padding: 10px;
+        --chm-chores-gap: 8px;
+        --chm-chores-min-height: 0;
+        --chm-title-font-size: 1.05rem;
+        --chm-title-icon-size: 20px;
+        --chm-title-gap: 8px;
+        --chm-title-margin: 2px;
+        --chm-title-padding: 0;
+        --chm-chore-padding: 8px 12px;
+        --chm-chore-min-height: 56px;
+        --chm-chore-radius: 12px;
+        --chm-chore-border-width: 2px;
+        --chm-chore-gap: 10px;
+        --chm-chore-info-gap: 10px;
+        --chm-chore-details-gap: 2px;
+        --chm-badge-size: 28px;
+        --chm-badge-font-size: 1rem;
+        --chm-checkbox-size: 40px;
+        --chm-checkbox-icon-size: 22px;
+        --chm-checkbox-radius: 9px;
+        --chm-chore-name-font-size: 1.05rem;
+        --chm-chore-points-font-size: 0.85rem;
+        --chm-chore-points-icon-size: 17px;
+        --chm-empty-padding: 18px 12px;
+        --chm-empty-icon-size: 40px;
+      }
+
+      /*
+       * Structural overrides for both tighter densities.
+       *
+       * Below 600px the default layout stacks the header and wraps the chore
+       * row so the checkbox drops onto its own line, which roughly doubles the
+       * height of every row. Tokens cannot undo that - it is layout, not size -
+       * so it is unwound explicitly. This is the single biggest saving on a
+       * phone, and it is why compact is not simply "default, but scaled".
+       */
+      :host([density]) .card-header {
+        flex-direction: row;
+        text-align: left;
+      }
+
+      :host([density]) .child-info {
+        flex-direction: row;
+      }
+
+      :host([density]) .chore-card {
+        flex-wrap: nowrap;
+      }
+
+      :host([density]) .chore-info {
+        flex: 1;
+        margin-bottom: 0;
+      }
+
+      /* Long chore names ellipsize rather than pushing the row taller. */
+      :host([density="compact"]) .chore-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      /* ---------------------------------------------------------------- *
+       * Visibility toggles
+       * ---------------------------------------------------------------- */
+
+      :host([hide-header]) .card-header {
+        display: none;
+      }
+
+      :host([hide-avatar]) .avatar-container {
+        display: none;
+      }
+
+      :host([hide-numbers]) .chore-number-wrapper {
+        display: none;
+      }
+
+      :host([hide-chore-points]) .chore-points {
+        display: none;
+      }
+
+      :host([hide-title]) .section-title {
+        display: none;
+      }
+
+      /* ---------------------------------------------------------------- *
+       * Motion
+       *
+       * Only the ambient loops stop - the idling avatar, the spinning star,
+       * the pulsing "waiting" badge. The celebration and its confetti are
+       * feedback for something the child just did, and are the point of the
+       * card, so they are left alone here.
+       * ---------------------------------------------------------------- */
+
+      :host([no-animations]) .avatar-container,
+      :host([no-animations]) .stars-value.my-stars ha-icon,
+      :host([no-animations]) .stars-value.waiting-stars ha-icon,
+      :host([no-animations]) .empty-state ha-icon {
+        animation: none;
+      }
+
+      /*
+       * A reader who has asked their OS for reduced motion gets the ambient
+       * loops stopped and the confetti suppressed regardless of config. The
+       * celebration still appears; it just no longer flies around.
+       */
+      @media (prefers-reduced-motion: reduce) {
+        .avatar-container,
+        .stars-value.my-stars ha-icon,
+        .stars-value.waiting-stars ha-icon,
+        .empty-state ha-icon,
+        .celebration-stars,
+        .chore-card.celebrating {
+          animation: none;
+        }
+
+        .confetti-container {
+          display: none;
+        }
+
+        .celebration-content {
+          animation: fade-in 0.2s ease;
+        }
+
+        .chore-card {
+          transition: none;
         }
       }
     `;
@@ -1121,12 +1349,76 @@ class ChoremanderChildCard extends LitElement {
       debug: false,
       default_sound: "coin",  // Default sound to use if chore doesn't specify one
       undo_sound: "undo",     // Sound to play when undoing a completion
+      density: "default",     // "default" | "cozy" | "compact" - see DENSITIES
+      show_header: true,      // The avatar / name / balance strip
+      show_avatar: true,
+      show_numbers: true,     // The rotated number badge on each chore
+      show_chore_points: true,// The "+2 star" line under each chore name
+      show_title: true,       // The "Morning Chores" heading
+      animations: true,       // Ambient motion; celebrations are unaffected
       ...config,
     };
+
+    if (!ChoremanderChildCard.DENSITIES.includes(this.config.density)) {
+      // Coerce rather than throw. A typo in one option should not replace a
+      // child's chore list with an error card.
+      console.warn(
+        `[Choremander] Unknown density "${this.config.density}". ` +
+        `Expected one of ${ChoremanderChildCard.DENSITIES.join(", ")}. Falling back to "default".`
+      );
+      this.config = { ...this.config, density: "default" };
+    }
+
+    this._syncLayoutAttributes();
+  }
+
+  /**
+   * Mirror the layout options onto the host as attributes, which is what the
+   * `:host([...])` rules in the stylesheet select on.
+   *
+   * Attributes are REMOVED at their default rather than set to "default", so
+   * an existing card that never opted in matches none of those selectors and
+   * every size resolves to the literal fallback it always had. That property
+   * is what makes this change invisible to current users, so the tests assert
+   * on it directly.
+   */
+  _syncLayoutAttributes() {
+    if (!this.config) return;
+
+    const flags = {
+      "hide-header": this.config.show_header === false,
+      "hide-avatar": this.config.show_avatar === false,
+      "hide-numbers": this.config.show_numbers === false,
+      "hide-chore-points": this.config.show_chore_points === false,
+      "hide-title": this.config.show_title === false,
+      "no-animations": this.config.animations === false,
+    };
+
+    for (const [name, on] of Object.entries(flags)) {
+      if (on) {
+        this.setAttribute(name, "");
+      } else {
+        this.removeAttribute(name);
+      }
+    }
+
+    if (this.config.density && this.config.density !== "default") {
+      this.setAttribute("density", this.config.density);
+    } else {
+      this.removeAttribute("density");
+    }
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    // setConfig can run before the element is in the document, and Lovelace
+    // reuses card elements across view switches, so re-assert on connect.
+    this._syncLayoutAttributes();
   }
 
   getCardSize() {
-    return 4;
+    const sizes = { default: 4, cozy: 3, compact: 2 };
+    return sizes[this.config?.density] ?? 4;
   }
 
   static getConfigElement() {
@@ -1866,6 +2158,17 @@ class ChoremanderChildCardEditor extends LitElement {
         color: var(--secondary-text-color);
         font-size: 0.85em;
       }
+
+      .section-heading {
+        margin: 24px 0 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--divider-color);
+        font-weight: 600;
+        color: var(--secondary-text-color);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.8em;
+      }
     `;
   }
 
@@ -1934,6 +2237,45 @@ class ChoremanderChildCardEditor extends LitElement {
         <small>Which time of day to show chores for (also sets the card title)</small>
       </div>
 
+      <div class="section-heading">Layout</div>
+
+      <div class="form-group">
+        <label>Density</label>
+        <select @change="${this._densityChanged}">
+          <option value="default" ?selected="${(this.config.density || "default") === "default"}">
+            Default — big and bold
+          </option>
+          <option value="cozy" ?selected="${this.config.density === "cozy"}">
+            Cozy — a bit tighter
+          </option>
+          <option value="compact" ?selected="${this.config.density === "compact"}">
+            Compact — fits about twice as many chores on screen
+          </option>
+        </select>
+        <small>How much space each chore takes up. Taps stay finger-sized at every setting.</small>
+      </div>
+
+      ${this._renderToggle(
+        "show_header",
+        "Show header",
+        "The avatar, name and star balance across the top"
+      )}
+      ${this._renderToggle("show_avatar", "Show avatar", "The round picture next to the name")}
+      ${this._renderToggle("show_title", "Show section heading", 'The "Morning Chores" line')}
+      ${this._renderToggle("show_numbers", "Show chore numbers", "The coloured number badges")}
+      ${this._renderToggle(
+        "show_chore_points",
+        "Show points per chore",
+        "The star value under each chore name"
+      )}
+      ${this._renderToggle(
+        "animations",
+        "Background animations",
+        "The floating avatar and spinning stars. Celebrations still play."
+      )}
+
+      <div class="section-heading">Advanced</div>
+
       <div class="form-group">
         <label>
           <input
@@ -1947,6 +2289,28 @@ class ChoremanderChildCardEditor extends LitElement {
         <small>Display debug information at the bottom of the card</small>
       </div>
     `;
+  }
+
+  /** All the layout toggles default to on, so absent means checked. */
+  _renderToggle(key, label, help) {
+    return html`
+      <div class="form-group">
+        <label>
+          <input
+            type="checkbox"
+            ?checked="${this.config[key] !== false}"
+            @change="${(e) => this._updateConfig(key, e.target.checked)}"
+            style="margin-right: 8px;"
+          />
+          ${label}
+        </label>
+        <small>${help}</small>
+      </div>
+    `;
+  }
+
+  _densityChanged(e) {
+    this._updateConfig("density", e.target.value);
   }
 
   _entityChanged(e) {
@@ -1965,9 +2329,24 @@ class ChoremanderChildCardEditor extends LitElement {
     this._updateConfig("debug", e.target.checked);
   }
 
+  /**
+   * Values that the card already assumes, so writing them down adds noise.
+   * Setting an option back to its default removes the key instead.
+   */
+  static LAYOUT_DEFAULTS = {
+    density: "default",
+    show_header: true,
+    show_avatar: true,
+    show_numbers: true,
+    show_chore_points: true,
+    show_title: true,
+    animations: true,
+  };
+
   _updateConfig(key, value) {
     const newConfig = { ...this.config, [key]: value };
-    if (value === undefined || value === "") {
+    const isDefault = ChoremanderChildCardEditor.LAYOUT_DEFAULTS[key] === value;
+    if (value === undefined || value === "" || isDefault) {
       delete newConfig[key];
     }
     const event = new CustomEvent("config-changed", {
