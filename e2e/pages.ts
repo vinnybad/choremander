@@ -80,6 +80,21 @@ export async function grantPoints(childId: string, points: number): Promise<void
 export const NOT_COMPLETED = '.chore-card[title="Click to complete"]';
 export const COMPLETED = '.chore-card[title="Click to undo"]';
 
+/**
+ * Read one resolved CSS property off an element.
+ *
+ * The layout options are asserted on computed geometry rather than on
+ * screenshots: what matters is that a row really is 56px tall and really has
+ * 8px of padding, and that survives a font-rendering difference between this
+ * machine and CI, which a pixel diff would not.
+ */
+export async function computed(locator: Locator, property: string): Promise<string> {
+  return locator.evaluate(
+    (el, prop) => getComputedStyle(el).getPropertyValue(prop).trim(),
+    property,
+  );
+}
+
 export class ChildCard {
   constructor(readonly root: Locator) {}
 
@@ -90,6 +105,68 @@ export class ChildCard {
         .locator("choremander-child-card")
         .filter({ has: page.locator(".section-title", { hasText: section }) }),
     );
+  }
+
+  /**
+   * Pick a card by its density.
+   *
+   * The card mirrors its layout options onto the host as attributes - that is
+   * how the `:host([density=...])` rules in the stylesheet select on them - so
+   * the same attributes serve as test handles. A card left at the default
+   * density carries no attribute at all, which is exactly the property the
+   * backward-compatibility test needs to assert.
+   */
+  static byDensity(
+    page: Page,
+    density: "cozy" | "compact",
+    section?: "Morning Chores" | "Evening Chores",
+  ): ChildCard {
+    const cards = page.locator(`choremander-child-card[density="${density}"]`);
+    return new ChildCard(
+      section
+        ? cards.filter({ has: page.locator(".section-title", { hasText: section }) })
+        : cards,
+    );
+  }
+
+  /** The card on the layout view with every visibility toggle turned off. */
+  static stripped(page: Page): ChildCard {
+    return new ChildCard(page.locator("choremander-child-card[hide-header]"));
+  }
+
+  get header(): Locator {
+    return this.root.locator(".card-header");
+  }
+
+  get avatar(): Locator {
+    return this.root.locator(".avatar-container");
+  }
+
+  get sectionTitle(): Locator {
+    return this.root.locator(".section-title");
+  }
+
+  get numberBadges(): Locator {
+    return this.root.locator(".chore-number-badge");
+  }
+
+  get chorePoints(): Locator {
+    return this.root.locator(".chore-points");
+  }
+
+  get choresContainer(): Locator {
+    return this.root.locator(".chores-container");
+  }
+
+  checkbox(name: string): Locator {
+    return this.chore(name).locator(".chore-checkbox");
+  }
+
+  /** Rendered height of a chore row, which is what "compact" is really about. */
+  async choreHeight(name: string): Promise<number> {
+    const box = await this.chore(name).boundingBox();
+    if (!box) throw new Error(`chore row "${name}" has no bounding box`);
+    return box.height;
   }
 
   chore(name: string): Locator {
@@ -251,6 +328,19 @@ export class RewardsCard {
         .locator("choremander-rewards-card")
         .filter({ has: page.locator(".header-title", { hasText: title }) }),
     );
+  }
+
+  /** Pick a card by its density; see the note on ChildCard.byDensity. */
+  static byDensity(page: Page, density: "cozy" | "compact"): RewardsCard {
+    return new RewardsCard(page.locator(`choremander-rewards-card[density="${density}"]`));
+  }
+
+  get costBadges(): Locator {
+    return this.root.locator(".cost-badge");
+  }
+
+  get rows(): Locator {
+    return this.root.locator(".reward-row");
   }
 
   reward(name: string): Locator {

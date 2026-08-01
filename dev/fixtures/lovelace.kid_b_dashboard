@@ -31,6 +31,63 @@
               "title": "My Rewards"
             }
           ]
+        },
+        {
+          "title": "Compact",
+          "path": "compact",
+          "cards": [
+            {
+              "type": "custom:choremander-child-card",
+              "entity": "sensor.choremander_overview",
+              "child_id": "child_radha",
+              "time_category": "morning",
+              "title": "Morning Chores",
+              "density": "compact"
+            },
+            {
+              "type": "custom:choremander-child-card",
+              "entity": "sensor.choremander_overview",
+              "child_id": "child_radha",
+              "time_category": "evening",
+              "title": "Evening Chores",
+              "density": "compact"
+            },
+            {
+              "type": "custom:choremander-rewards-card",
+              "entity": "sensor.choremander_overview",
+              "child_id": "child_radha",
+              "title": "My Rewards",
+              "density": "compact"
+            }
+          ]
+        },
+        {
+          "title": "Layout",
+          "path": "layout",
+          "cards": [
+            {
+              "type": "custom:choremander-child-card",
+              "entity": "sensor.choremander_overview",
+              "child_id": "child_radha",
+              "time_category": "morning",
+              "title": "Morning Chores",
+              "density": "cozy"
+            },
+            {
+              "type": "custom:choremander-child-card",
+              "entity": "sensor.choremander_overview",
+              "child_id": "child_radha",
+              "time_category": "evening",
+              "title": "Evening Chores",
+              "density": "compact",
+              "show_header": false,
+              "show_avatar": false,
+              "show_numbers": false,
+              "show_chore_points": false,
+              "show_title": false,
+              "animations": false
+            }
+          ]
         }
       ]
     }
