@@ -302,46 +302,58 @@ For big family goals (vacation, museum trip), enable **Jackpot** mode. All child
 
 ### Testing Changes Locally
 
-A Docker-based dev environment is included for testing changes without touching your real Home Assistant instance.
+A full local environment is included: a real Home Assistant in Docker with
+seeded family data, plus three test layers that run against it. Nothing touches
+your real Home Assistant instance.
+
+**See [docs/TESTING.md](docs/TESTING.md) for the complete guide.**
 
 #### Requirements
 - Docker and Docker Compose
+- Python 3.13 and Node 20+ (only if you want to run the test suites)
 
 #### Quick Start
 
 ```bash
-# Start the dev environment (first run will download HACS)
-./dev/start.sh
-
-# Open browser to http://localhost:8123
-# Login: dev / dev
-# Three test dashboards are pre-configured in the sidebar:
-#   - Kid A (morning/evening chores, progress, rewards)
-#   - Kid B (morning/evening chores, progress, rewards)
-#   - Parent (approvals, points management, reorder)
+make install    # venv, Python deps, Node deps, Chromium
+make up         # start Home Assistant and wait until Choremander loads
+make verify     # lint + unit tests + API e2e + browser e2e
 ```
+
+`make up` is fully non-interactive: it starts the container, completes
+onboarding over the REST API, creates the `dev` user, and blocks until the
+integration has actually loaded. Log in at <http://localhost:8123> with
+`dev` / `dev`.
+
+Three dashboards are pre-configured in the sidebar:
+
+| URL | Contents |
+|---|---|
+| `/krishna` | Kid dashboard — chores, progress, rewards |
+| `/radha` | Kid dashboard |
+| `/parent` | Approvals, points management, chore reorder |
 
 #### Development Workflow
 
 ```bash
-# Make changes to Python files in custom_components/choremander/
-# Then restart to see changes:
-./dev/restart.sh
+# After changing Python files:
+make restart          # restarts and waits until it is serving again
 
-# Make changes to JS card files - just hard refresh browser (Cmd+Shift+R)
+# After changing JS card files, just hard refresh the browser (Cmd+Shift+R)
 
-# View filtered logs while testing
-./dev/logs.sh
+make test             # fast unit tests, no container needed
+make e2e              # API-driven tests against the live container
+make browser          # Playwright tests driving the real cards
+make browser-headed   # ...and watch them run
 
-# Get a shell inside the container
-./dev/shell.sh
-
-# Stop when done
-./dev/stop.sh
-
-# Reset to fresh state (removes auth, HACS, database)
-./dev/reset.sh
+make logs             # follow filtered container logs
+make shell            # shell inside the container
+make seed             # restore the seeded family data
+make reset            # wipe all generated state
+make down             # stop
 ```
+
+Run `make help` for the full list.
 
 #### Pre-configured Test Data
 

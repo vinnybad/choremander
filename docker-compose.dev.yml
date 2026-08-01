@@ -1,7 +1,13 @@
 services:
   homeassistant:
     container_name: choremander-dev
-    image: ghcr.io/home-assistant/home-assistant:stable
+    # Pinned deliberately. The cards bootstrap LitElement off Home Assistant's
+    # own internals, so a silent `stable` bump can break all six at once. This
+    # also keeps the container on the same core version as the Python test
+    # harness (pytest-homeassistant-custom-component 0.13.316 -> HA 2026.2.3),
+    # so the unit and browser suites are testing the same thing.
+    # Bump this and requirements-test.txt together.
+    image: ghcr.io/home-assistant/home-assistant:2026.2.3
     volumes:
       - ./dev/config:/config
       - ./custom_components/choremander:/config/custom_components/choremander:ro

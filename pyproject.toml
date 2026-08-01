@@ -1,0 +1,56 @@
+[project]
+name = "choremander"
+version = "1.0.4"
+description = "Family chore management for Home Assistant"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q --strict-markers"
+markers = [
+    "e2e: requires a live Home Assistant container (deselect with '-m \"not e2e\"')",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:homeassistant.*",
+]
+
+[tool.coverage.run]
+source = ["custom_components/choremander"]
+omit = ["custom_components/choremander/www/*"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = ["custom_components/choremander/www"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific
+]
+ignore = [
+    "E501",   # line length is handled by the formatter
+    "B008",   # function call in default arg (common in voluptuous schemas)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components"]
+force-sort-within-sections = true

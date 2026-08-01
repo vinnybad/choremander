@@ -12,7 +12,7 @@
           "cards": [
             {
               "type": "custom:choremander-approvals-card",
-              "entity": "sensor.choremander_overview",
+              "entity": "sensor.pending_approvals",
               "title": "Pending Approvals"
             },
             {

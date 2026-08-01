@@ -1,0 +1,13 @@
+# Python test harness for the Choremander integration.
+# pytest-homeassistant-custom-component pins a matching Home Assistant core
+# version, which is what the unit tests run against.
+pytest-homeassistant-custom-component==0.13.316
+ruff==0.14.2
+
+# The manifest depends on the `frontend` component, which imports the compiled
+# `hass_frontend` module. Without this the integration cannot set up under test.
+# Must match the pin in homeassistant/package_constraints.txt.
+home-assistant-frontend==20260128.6
+
+# Used by the API-driven end-to-end tests that talk to the live container.
+aiohttp>=3.13

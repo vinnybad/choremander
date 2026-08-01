@@ -1,0 +1,15 @@
+{
+  "name": "choremander-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Browser end-to-end tests driving the Choremander Lovelace cards",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report",
+    "install-browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  }
+}
