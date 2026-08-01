@@ -6,8 +6,8 @@ each catching things the others cannot.
 | Layer | Location | Tests | Needs a container? | What it proves |
 |---|---|---|---|---|
 | **Unit** | `tests/unit/` | 347 | No | The Python logic is correct — pricing math, storage, config flow, entity state |
-| **API end-to-end** | `tests/e2e/` | 8 | Yes | Real service calls against real Home Assistant move real state |
-| **Browser end-to-end** | `e2e/` | 13 | Yes | The Lovelace cards actually work when a person clicks them |
+| **API end-to-end** | `tests/e2e/` | 13 | Yes | Real service calls against real Home Assistant move real state |
+| **Browser end-to-end** | `e2e/` | 18 | Yes | The Lovelace cards actually work when a person clicks them |
 
 Unit coverage is 97% of the integration, with `coordinator.py` — the dynamic
 reward pricing — at 100%.
@@ -124,8 +124,18 @@ Two traps worth knowing:
   will conflict: the second one undoes it. Each mutating spec owns a distinct
   (child, chore) pair — the allocation is documented at the top of each file.
 - **A successful completion covers the viewport** with a celebration overlay and
-  confetti for up to 3.5s. `ChildCard.complete()` waits it out; a raw `.click()`
-  followed by another interaction will hit the overlay instead.
+  confetti for up to 3.5s. `ChildCard.complete()` and `RewardsCard.claim()` wait
+  it out; a raw `.click()` followed by another interaction will hit the overlay
+  instead.
+- **`recordServiceCalls` must be attached before `openDashboard`.** It listens
+  for websockets the page opens *after* it is installed, and the frontend opens
+  its socket during load. Attach it late and every assertion sees zero traffic —
+  which reads as "the card never called the service" rather than as a bug in the
+  test.
+- **Nothing is affordable at the seeded balances** (Krishna 25, Radha 15, and
+  the cheapest reward is 50). A spec that exercises claiming has to call
+  `grantPoints()` first. `e2e/specs/rewards-card.spec.ts` documents the running
+  balance each of its tests assumes.
 
 ## Known defects
 
@@ -151,8 +161,14 @@ test-visible change. Tests that pin a bug are marked:
 | 10 | A claim button is created for every child × every reward, ignoring `assigned_to` |
 | 11 | No server-side assignment check: any child can complete any chore and claim any reward |
 | 12 | There is no `reject_reward` service, so a parent cannot deny a reward claim once made |
+| 13 | A jackpot pools every child's points in its progress bar, but `claim_reward` charges one child, so a jackpot is only claimable once a single child holds the whole cost alone. The card gates on the rule the backend enforces rather than on the pooled total |
 
-Two further defects were found and **fixed** while building this suite:
+Three further defects were found and **fixed** while building this suite:
+
+- **Rewards could not be claimed at all** ([issue #3](https://github.com/vinnybad/choremander/issues/3)).
+  `_renderRewardRow` drew the reward icon as decoration — no button, no handler,
+  no service call anywhere in the card. Every service and sensor behind it
+  worked the whole time, which is why only the browser layer could catch it.
 
 - The parent dashboard's approvals card was wired to `sensor.choremander_overview`,
   which has no `chore_completions` attribute, so it always showed "All caught
