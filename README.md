@@ -175,6 +175,19 @@ show_header: false      # Optional: hide the avatar / name / balance strip
 ```
 </details>
 
+The same card at each `density` — the chores and the child are identical, only
+the option differs:
+
+<p align="center">
+  <img src="images/density-comparison.png" alt="The child card at default, cozy and compact density" width="820">
+</p>
+
+What that adds up to on a phone. Same dashboard, one screen:
+
+<p align="center">
+  <img src="images/density-phone.png" alt="A phone screen of the same dashboard at default and compact density" width="620">
+</p>
+
 <details>
 <summary>Layout options</summary>
 
