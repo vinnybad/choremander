@@ -69,3 +69,9 @@ e2e/.auth/
 
 # Stray Playwright output if the runner is invoked from the repo root
 /test-results/
+
+# Claude Code's scratch space. `worktrees/` holds full checkouts of this repo -
+# 39MB of them at one point - which a `git add -A` would otherwise try to commit
+# into the repo itself. Ignored as a directory so anything shareable that lands
+# in .claude/ later (settings.json, agents) can still be tracked deliberately.
+.claude/worktrees/
