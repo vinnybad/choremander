@@ -70,8 +70,18 @@ browser: ## Run the Playwright tests against the running container
 browser-headed: ## Same as `browser`, but watch it happen in a real browser
 	cd e2e && ../$(PW) test --headed
 
+# hassfest walks every directory under the workspace it is given. Starting the
+# dev container leaves an empty `dev/config/custom_components/choremander/`
+# behind as its bind-mount point, and hassfest reads that as an integration with
+# no manifest and dies on a KeyError - so mounting $(PWD) breaks permanently the
+# first time anyone runs `make up`. Exporting only what git tracks gives it the
+# same tree CI checks out.
 validate: ## Run Home Assistant's hassfest checks the way CI does
-	docker run --rm -v "$(PWD)":/github/workspace ghcr.io/home-assistant/hassfest:latest
+	@tmp=$$(mktemp -d) && \
+		git ls-files --cached --others --exclude-standard -z \
+			| rsync -a --files-from=- --from0 . "$$tmp/" && \
+		docker run --rm -v "$$tmp":/github/workspace ghcr.io/home-assistant/hassfest:latest; \
+		status=$$?; rm -rf "$$tmp"; exit $$status
 
 verify: lint test up e2e browser ## Everything: lint, unit, container, API and browser tests
 	@echo
