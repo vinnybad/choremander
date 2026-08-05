@@ -6,9 +6,11 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 import voluptuous as vol
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.start import async_at_started
 
 from .const import (
     ATTR_CHILD_ID,
@@ -29,6 +31,8 @@ from .const import (
 )
 from .coordinator import ChoremanderCoordinator
 from .frontend import async_register_cards, async_register_frontend
+from .resource_repair import ISSUE_ID as RESOURCE_ISSUE_ID
+from .resource_repair import async_check_for_deleted_resources
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +40,13 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON, Platform.BINARY_S
 
 # Track if services are registered
 SERVICES_REGISTERED = "services_registered"
+
+# Track if the deleted-resource check has been scheduled. Deliberately a
+# top-level `hass.data` key rather than one inside `hass.data[DOMAIN]`: that
+# dict is scanned entry-by-entry on unload, and every non-entry key left in it
+# makes the last unload look like it still has entries (see the frontend
+# sentinel and defect #1 in tests/unit/test_init.py).
+RESOURCE_CHECK_SCHEDULED = f"{DOMAIN}_resource_check_scheduled"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -57,6 +68,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register frontend static paths and Lovelace resources (only once)
     await async_register_frontend(hass)
     await async_register_cards(hass)
+
+    # Older versions truncated .storage/lovelace_resources, deleting resources
+    # belonging to other integrations (issue #2). Look for the wreckage and
+    # offer to put it back. Deferred until Home Assistant has started: it reads
+    # every dashboard and scans config/www, neither of which should be on the
+    # critical path of setting up an entry.
+    if RESOURCE_CHECK_SCHEDULED not in hass.data:
+        # Keep the unsub so an entry unloaded before Home Assistant finishes
+        # starting does not leave a scan queued for an integration on its way
+        # out. Safe to call after it has fired - it nulls itself.
+        hass.data[RESOURCE_CHECK_SCHEDULED] = async_at_started(
+            hass, async_check_for_deleted_resources
+        )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -81,7 +105,47 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _async_unregister_services(hass)
             hass.data[DOMAIN][SERVICES_REGISTERED] = False
 
+        _async_teardown_resource_check(hass)
+
     return unload_ok
+
+
+@callback
+def _async_teardown_resource_check(hass: HomeAssistant) -> None:
+    """Cancel the pending deleted-resource check once the last entry is gone.
+
+    Detected by looking for live coordinators rather than by the length of
+    `hass.data[DOMAIN]`, which also holds non-entry sentinels and so never
+    reaches zero once the frontend has registered.
+
+    Deliberately does *not* touch the repair issue. A reload is an unload
+    followed by a setup, and deleting the issue would throw away the
+    `dismissed_version` the registry holds - so every options change would
+    resurrect a repair the user had already dismissed. Removing the integration
+    is handled by `async_remove_entry` instead.
+    """
+    if any(isinstance(value, ChoremanderCoordinator) for value in hass.data[DOMAIN].values()):
+        return
+
+    if (unsub := hass.data.pop(RESOURCE_CHECK_SCHEDULED, None)) is not None:
+        unsub()
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Clean up after the integration is removed, not merely unloaded.
+
+    The repair issue must not outlive Choremander. Once the last entry is gone
+    there is no repairs platform registered, so Home Assistant substitutes a
+    plain confirm flow: the user's "Fix" click would silently dismiss the issue
+    and restore nothing.
+
+    Only when the *last* entry goes, though - while any remain the platform is
+    still registered and the repair still works.
+    """
+    if hass.config_entries.async_entries(DOMAIN):
+        return
+
+    ir.async_delete_issue(hass, DOMAIN, RESOURCE_ISSUE_ID)
 
 
 def _get_coordinator(hass: HomeAssistant) -> ChoremanderCoordinator | None:

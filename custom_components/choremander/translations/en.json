@@ -274,5 +274,21 @@
         }
       }
     }
+  },
+  "issues": {
+    "deleted_lovelace_resources": {
+      "title": "Restore missing Lovelace card resources",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Restore missing Lovelace card resources",
+            "description": "Your dashboards use {count} custom card(s) whose JavaScript is present in your `www` folder but is not registered as a Lovelace resource, so those cards cannot load:\n\n{resources}\n\nAn earlier version of Choremander could delete resources belonging to other cards - it wrote to the resource list before Home Assistant had finished loading it, which overwrote the rest. That bug is fixed, but any entries it removed have to be added back. If you removed these yourself, or never registered them, you can ignore this and dismiss it.\n\nSelect **Submit** to register them again. Nothing else is changed, and anything you have already re-added by hand is left alone. Reload your browser afterwards."
+          }
+        },
+        "abort": {
+          "nothing_to_restore": "Every card your dashboards use is already registered, so there is nothing to restore."
+        }
+      }
+    }
   }
 }

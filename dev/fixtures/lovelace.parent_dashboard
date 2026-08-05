@@ -36,6 +36,10 @@
               "type": "custom:choremander-rewards-card",
               "entity": "sensor.choremander_overview",
               "title": "All Rewards"
+            },
+            {
+              "type": "custom:third-party-card",
+              "title": "Third-party card (issue #2 guard)"
             }
           ]
         },

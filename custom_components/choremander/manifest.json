@@ -8,7 +8,8 @@
   "dependencies": [
     "http",
     "lovelace",
-    "frontend"
+    "frontend",
+    "repairs"
   ],
   "documentation": "https://github.com/vinnybad/choremander",
   "integration_type": "service",
