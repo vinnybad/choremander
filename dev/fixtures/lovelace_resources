@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "lovelace_resources",
+  "data": {
+    "items": [
+      {
+        "id": "third_party_resource",
+        "type": "module",
+        "url": "/local/third-party-card.js"
+      }
+    ]
+  }
+}

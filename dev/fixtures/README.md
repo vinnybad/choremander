@@ -3,6 +3,15 @@
 The canonical starting state for the local test environment: two children, eight
 chores, five rewards, and the three dashboards that display them.
 
+`lovelace_resources` seeds one resource Choremander does not own,
+`/local/third-party-card.js` (the file itself lives in `dev/config/www/`). It
+stands in for the HACS-installed cards a real user has. Issue #2 — Choremander
+truncating `.storage/lovelace_resources` to its own seven cards and erasing
+everyone else's — survived precisely because this environment had no other
+resources to lose. `tests/e2e/test_lovelace_resources.py` asserts it is still
+there after startup and after a restart, so removing it would quietly make that
+guard vacuous.
+
 `dev/seed.sh` copies these files into `dev/config/.storage/`, overwriting
 whatever the running container has accumulated. `dev/reset.sh` does the same as
 part of a full wipe.

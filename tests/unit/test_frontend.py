@@ -8,11 +8,12 @@ this module is meant to cover.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Final
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EVENT_HOMEASSISTANT_FINAL_WRITE
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 import pytest
@@ -24,7 +25,9 @@ from custom_components.choremander.frontend import (
     FRONTEND_REGISTERED,
     GLOBAL_MODULES,
     URL_BASE,
+    _async_get_version,
     _get_version,
+    async_ensure_resources_loaded,
     async_register_cards,
     async_register_frontend,
 )
@@ -39,13 +42,25 @@ class FakeResources:
     dicts - the production code indexes into them and splits their URLs.
     """
 
-    def __init__(self, items: list[dict[str, Any]] | None = None) -> None:
+    def __init__(self, items: list[dict[str, Any]] | None = None, loaded: bool = True) -> None:
         self._items = items or []
         self.created: list[dict[str, Any]] = []
         self.updated: list[tuple[str, dict[str, Any]]] = []
+        # Mirrors ResourceStorageCollection: `data` stays empty and `async_items()`
+        # lies until `async_load()` has pulled the store off disk.
+        self.loaded = loaded
+        self.load_calls = 0
+        self._stored = list(self._items)
+        if not loaded:
+            self._items = []
 
     def async_items(self) -> list[dict[str, Any]]:
         return list(self._items)
+
+    async def async_load(self) -> None:
+        self.load_calls += 1
+        self._items = list(self._stored)
+        self.loaded = True
 
     async def async_create_item(self, data: dict[str, Any]) -> dict[str, Any]:
         self.created.append(data)
@@ -59,10 +74,12 @@ class FakeResources:
 class FakeLovelace:
     """Stand-in for LovelaceData."""
 
-    def __init__(self, resources: FakeResources | None = None, mode: str | None = None) -> None:
+    def __init__(
+        self, resources: FakeResources | None = None, resource_mode: str | None = None
+    ) -> None:
         self.resources = resources
-        if mode is not None:
-            self.mode = mode
+        if resource_mode is not None:
+            self.resource_mode = resource_mode
 
 
 @pytest.fixture
@@ -171,6 +188,21 @@ async def test_real_setup_registers_the_static_path_and_the_global_module(
 # ---------------------------------------------------------------------------
 
 
+async def test_the_manifest_is_read_off_the_event_loop(hass: HomeAssistant) -> None:
+    """`_get_version` opens a file; doing that in the loop makes HA shout.
+
+    Home Assistant logs "Detected blocking call to open ... please create a bug
+    report" with a full stack trace on every startup otherwise, which sends
+    users here to report something that is ours to fix.
+    """
+    with patch.object(
+        hass, "async_add_executor_job", wraps=hass.async_add_executor_job
+    ) as executor:
+        assert await _async_get_version(hass) == MANIFEST_VERSION
+
+    executor.assert_called_once_with(_get_version)
+
+
 def test_get_version_reads_the_integration_manifest() -> None:
     """Cache busting is driven by `manifest.json`, not a hardcoded literal."""
     assert _get_version() == MANIFEST_VERSION, "the cache-busting version must track manifest.json"
@@ -251,6 +283,222 @@ async def test_register_cards_updates_only_the_resources_whose_version_is_stale(
     ], "the two cards that did not exist yet should be created"
 
 
+# ---------------------------------------------------------------------------
+# Regression: issue #2 - registration must not wipe other integrations'
+# Lovelace resources.
+#
+# `ResourceStorageCollection` is lazy: `loaded` starts False, `data` starts
+# empty, and `async_items()` reports nothing until `async_load()` runs. Writing
+# to it while unloaded makes the debounced `_data_to_save()` serialise only the
+# rows Choremander just created - silently truncating `.storage/
+# lovelace_resources` to seven entries and erasing every other custom card.
+# ---------------------------------------------------------------------------
+
+THIRD_PARTY_RESOURCES: Final = [
+    {
+        "id": "mini-graph-id",
+        "url": "/hacsfiles/mini-graph-card/mini-graph-card-bundle.js",
+        "type": "module",
+    },
+    {
+        "id": "button-card-id",
+        "url": "/hacsfiles/button-card/button-card.js",
+        "type": "module",
+    },
+]
+
+
+@pytest.fixture
+def seeded_lovelace_resources(hass_storage: dict[str, Any]) -> list[dict[str, Any]]:
+    """Pre-existing third-party resources on disk, as a real install would have."""
+    hass_storage["lovelace_resources"] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": "lovelace_resources",
+        "data": {"items": [dict(item) for item in THIRD_PARTY_RESOURCES]},
+    }
+    return THIRD_PARTY_RESOURCES
+
+
+async def _flush_delayed_save(hass: HomeAssistant) -> None:
+    """Force the debounced `_async_schedule_save` out to the store.
+
+    `Store.async_delay_save` schedules its write with `hass.loop.call_at`, which
+    the mocked clock cannot advance, so firing the final-write event - what a
+    real shutdown does - is the way to make the pending write land.
+    """
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_FINAL_WRITE)
+    await hass.async_block_till_done()
+
+
+async def test_register_cards_loads_the_collection_before_writing_to_it(
+    hass: HomeAssistant,
+) -> None:
+    """An unloaded collection is loaded first, so existing rows are visible."""
+    resources = FakeResources(
+        [{"id": "third-party-id", "url": "/hacsfiles/button-card/button-card.js"}],
+        loaded=False,
+    )
+    hass.data["lovelace"] = FakeLovelace(resources)
+
+    await async_register_cards(hass)
+
+    assert resources.load_calls == 1, (
+        "a lazy resource collection must be loaded before it is written to, or "
+        "the save serialises an empty collection and drops every other resource"
+    )
+    assert [item["url"] for item in resources.async_items()] == [
+        "/hacsfiles/button-card/button-card.js"
+    ], "loading must not disturb the rows that were already there"
+
+
+class LoadStatelessResources(FakeResources):
+    """A collection with no `loaded` attribute, as a future Home Assistant might.
+
+    Both of Home Assistant's collection classes define `loaded` as a class
+    attribute today, so this cannot happen yet - it models the API changing
+    under us, which is the one case where guessing wrong destroys user data.
+    """
+
+    def __init__(self, items: list[dict[str, Any]] | None = None) -> None:
+        super().__init__(items)
+        del self.loaded
+
+
+async def test_register_cards_refuses_to_write_when_load_state_is_unknowable(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """No `loaded` attribute means no write - silence beats deleting dashboards."""
+    resources = LoadStatelessResources(
+        [{"id": "third-party-id", "url": "/hacsfiles/button-card/button-card.js"}]
+    )
+    hass.data["lovelace"] = FakeLovelace(resources)
+
+    await async_register_cards(hass)
+
+    assert resources.created == [], (
+        "with no way to tell whether the collection is loaded, writing to it "
+        "risks truncating the store - registration must bail out instead"
+    )
+    assert resources.updated == []
+    assert "has no load state" in caplog.text, (
+        "the user needs to be told why their cards were not registered"
+    )
+    assert f"{URL_BASE}/<card-name>.js" in caplog.text, (
+        "the warning should say where to find the cards for manual registration"
+    )
+
+
+async def test_ensure_resources_loaded_reports_whether_it_is_safe_to_write(
+    hass: HomeAssistant,
+) -> None:
+    """The shared guard: True once loaded, False when the API is unrecognisable."""
+    lazy = FakeResources([{"id": "a", "url": "/local/a.js"}], loaded=False)
+    assert await async_ensure_resources_loaded(lazy) is True
+    assert lazy.load_calls == 1, "an unloaded collection should be loaded exactly once"
+    assert lazy.loaded is True, (
+        "async_load() does not set `loaded` itself - the caller must, or every "
+        "later write reloads and Home Assistant's own guards stay armed"
+    )
+
+    already = FakeResources(loaded=True)
+    assert await async_ensure_resources_loaded(already) is True
+    assert already.load_calls == 0
+
+    assert await async_ensure_resources_loaded(LoadStatelessResources()) is False
+
+
+async def test_register_cards_does_not_reload_an_already_loaded_collection(
+    hass: HomeAssistant,
+) -> None:
+    """The `loaded` flag is honoured - no redundant store reads per setup."""
+    resources = FakeResources(loaded=True)
+    hass.data["lovelace"] = FakeLovelace(resources)
+
+    await async_register_cards(hass)
+
+    assert resources.load_calls == 0, "an already-loaded collection must not be reloaded"
+    assert len(resources.created) == len(CARDS)
+
+
+async def test_real_setup_preserves_third_party_resources_in_memory(
+    hass: HomeAssistant,
+    seeded_lovelace_resources: list[dict[str, Any]],
+    init_integration: ConfigEntry,
+) -> None:
+    """Issue #2: other integrations' cards survive Choremander's registration."""
+    resources = hass.data["lovelace"].resources
+    urls = [item["url"] for item in resources.async_items()]
+
+    for item in seeded_lovelace_resources:
+        assert item["url"] in urls, (
+            f"{item['url']} was erased from the Lovelace resource collection by "
+            f"Choremander's card registration; collection now holds {urls}"
+        )
+
+
+async def test_real_setup_does_not_truncate_the_resources_store_on_disk(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    seeded_lovelace_resources: list[dict[str, Any]],
+    init_integration: ConfigEntry,
+) -> None:
+    """The end-to-end symptom: `.storage/lovelace_resources` keeps every row."""
+    await _flush_delayed_save(hass)
+
+    saved = [item["url"] for item in hass_storage["lovelace_resources"]["data"]["items"]]
+
+    for item in seeded_lovelace_resources:
+        assert item["url"] in saved, (
+            f"{item['url']} was written out of .storage/lovelace_resources; "
+            f"the file now contains only {saved}"
+        )
+    assert saved == [item["url"] for item in seeded_lovelace_resources] + [
+        _versioned(card) for card in CARDS
+    ], "the stored file should be the pre-existing rows followed by Choremander's cards"
+
+
+async def test_a_restart_neither_duplicates_nor_drops_resources(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    seeded_lovelace_resources: list[dict[str, Any]],
+    init_integration: ConfigEntry,
+) -> None:
+    """Reported symptom was cumulative: re-added resources vanished again on reboot."""
+    await _flush_delayed_save(hass)
+    after_first_boot = [item["url"] for item in hass_storage["lovelace_resources"]["data"]["items"]]
+
+    # A restart gives Lovelace a fresh, unloaded collection over the same store.
+    # Clearing `store._data` is load-bearing: the mocked store short-circuits
+    # its load when `_data` is already populated, so without this the reload
+    # would be a no-op and the test would pass for the wrong reason.
+    collection = hass.data["lovelace"].resources
+    collection.data.clear()
+    collection.loaded = False
+    collection.store._data = None
+
+    await async_register_cards(hass)
+    await _flush_delayed_save(hass)
+
+    after_second_boot = [
+        item["url"] for item in hass_storage["lovelace_resources"]["data"]["items"]
+    ]
+
+    # Assert the third-party rows explicitly. Comparing the two boots against
+    # each other is not enough on its own: with the bug present *both* boots
+    # truncate to the same seven cards, so the equality below holds happily
+    # while the user's resources are gone. This loop is what actually fails.
+    for item in seeded_lovelace_resources:
+        assert item["url"] in after_second_boot, (
+            f"{item['url']} survived the first boot but was erased by the "
+            f"second; the store now holds {after_second_boot}"
+        )
+    assert after_second_boot == after_first_boot, (
+        "a restart must leave the resource store byte-identical; "
+        f"before={after_first_boot} after={after_second_boot}"
+    )
+
+
 async def test_register_cards_is_a_noop_when_lovelace_is_unavailable(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -283,7 +531,7 @@ async def test_register_cards_only_logs_instructions_in_yaml_mode(
 ) -> None:
     """In YAML mode the resources are printed for the user to copy, not created."""
     resources = FakeResources()
-    hass.data["lovelace"] = FakeLovelace(resources, mode="yaml")
+    hass.data["lovelace"] = FakeLovelace(resources, resource_mode="yaml")
 
     await async_register_cards(hass)
 
@@ -295,25 +543,23 @@ async def test_register_cards_only_logs_instructions_in_yaml_mode(
         )
 
 
-async def test_yaml_mode_branch_is_unreachable_because_lovelace_exposes_resource_mode(
+async def test_yaml_mode_guard_reads_the_attribute_lovelace_actually_exposes(
     hass: HomeAssistant, init_integration: ConfigEntry
 ) -> None:
-    """CURRENT BEHAVIOUR: the YAML-mode guard reads an attribute that does not exist.
+    """The YAML-mode branch is reachable against a real install.
 
-    `frontend.py` does `getattr(lovelace_data, "mode", "storage")`, but Home
-    Assistant's `LovelaceData` exposes `resource_mode`, not `mode`. The YAML
-    branch above is therefore dead code against a real install - it always
-    takes the storage path. Pinned so a future rename is deliberate.
+    `frontend.py` used to read `lovelace_data.mode`, which `LovelaceData` does
+    not define - so the guard always fell through to the storage path and the
+    YAML branch was dead code. It now reads `resource_mode`.
     """
     lovelace_data = hass.data["lovelace"]
 
-    assert not hasattr(lovelace_data, "mode"), (
-        "LovelaceData grew a `mode` attribute; the YAML-mode branch in "
-        "frontend.py is now live and its behaviour must be re-verified"
-    )
     assert hasattr(lovelace_data, "resource_mode"), (
         "LovelaceData should expose resource_mode - that is the attribute "
-        "frontend.py ought to be reading"
+        "frontend.py reads to decide between the YAML and storage paths"
+    )
+    assert not hasattr(lovelace_data, "mode"), (
+        "LovelaceData grew a `mode` attribute; re-check which one frontend.py should be reading"
     )
 
 
