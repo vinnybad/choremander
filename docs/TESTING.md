@@ -5,9 +5,9 @@ each catching things the others cannot.
 
 | Layer | Location | Tests | Needs a container? | What it proves |
 |---|---|---|---|---|
-| **Unit** | `tests/unit/` | 347 | No | The Python logic is correct — pricing math, storage, config flow, entity state |
-| **API end-to-end** | `tests/e2e/` | 13 | Yes | Real service calls against real Home Assistant move real state |
-| **Browser end-to-end** | `e2e/` | 30 | Yes | The Lovelace cards actually work when a person clicks them |
+| **Unit** | `tests/unit/` | 502 | No | The Python logic is correct — pricing math, the points ledger, storage and its migration, streak arithmetic, config flow, entity state and payload size |
+| **API end-to-end** | `tests/e2e/` | 24 | Yes | Real service calls against real Home Assistant move real state |
+| **Browser end-to-end** | `e2e/` | 54 | Yes | The Lovelace cards actually work when a person clicks them |
 
 Unit coverage is 97% of the integration, with `coordinator.py` — the dynamic
 reward pricing — at 100%.
@@ -90,6 +90,23 @@ make cov                # with a coverage report
 Fixtures live in `tests/unit/conftest.py`: `mock_config_entry`,
 `init_integration`, `coordinator`.
 
+Four of these files need no Home Assistant at all, which is the point of the
+modules they cover being free of HA imports:
+
+| File | Covers | Why it is standalone |
+|---|---|---|
+| `test_streaks.py` | `streaks.py` | Streak arithmetic takes a set of dates and a `today`, so gaps, month and year boundaries, leap days and the yesterday grace period are all table-driven rather than staged against a live clock |
+| `test_migration.py` | `migration.py` | A user's storage file cannot be recreated if the migration is wrong, so the malformed-input cases matter as much as the happy path |
+| `test_activity_feed.py` | `activity.py` | Feed shape and ordering, including across daylight-saving transitions |
+| `test_points_ledger.py` | the ledger paths in `coordinator.py` | Needs the coordinator, so this one does use the container-free HA harness |
+
+`test_sensor_payload_size.py` is a different kind of guard: it builds a
+deliberately oversized household and measures every sensor's encoded attribute
+size against the recorder's 16KiB ceiling. **When it fails, the fix is to move
+data onto a companion entity, never to raise the threshold** — the limit is a
+recorder database column, and `ActivitySensor` and `StreaksSensor` both exist
+for exactly this reason.
+
 `bypass_frontend_registration` is **opt-in, not autouse**, and should stay that
 way. `frontend.py` writes `frontend_registered` into the same `hass.data[DOMAIN]`
 dict that `__init__.py` scans on unload, so bypassing registration changes
@@ -107,6 +124,11 @@ make e2e
 
 Because service calls return before the coordinator has pushed new state, assert
 with `ha.wait_for(...)` rather than reading straight back.
+
+The suite reseeds once per session, but `tests/e2e/test_ledger_and_streaks.py`
+reseeds again for its own module. Chores carry a daily limit, so a chore another
+module already completed today cannot be completed again, and its reconciliation
+test needs the ledger to start empty against known balances.
 
 ### Browser end-to-end tests
 
@@ -150,6 +172,17 @@ Two traps worth knowing:
   card's `(min-width: 1024px)` block *and* its `(max-height: 600px)` block is
   just missed. A spec asserting on sizes should set its own viewport rather
   than inherit one and silently test a different breakpoint than it reads like.
+- **`hasText` matches substrings.** A view holding both "Streaks" and "Compact
+  Streaks" has the first name select both cards, and the failure reads as a
+  duplicated element rather than as a bad selector. `ActivityCard.byTitle` and
+  `StreakCard.byTitle` anchor the match with a regex; use them rather than
+  filtering by title yourself.
+- **The activity and streak specs stage their own history.** The committed
+  fixture carries no completions, so every row they assert on is produced by
+  really calling the service that produces it. That is deliberate: it exercises
+  the ledger, the migration, the sensor and the card as one chain. Multi-day
+  streaks cannot be staged against a live clock and live in `test_streaks.py`
+  instead.
 
 ## Known defects
 
@@ -158,15 +191,13 @@ to do, so it is green today and a future fix shows up as a deliberate,
 test-visible change. Tests that pin a bug are marked:
 
 ```python
-# CURRENT BEHAVIOUR (defect #2, see docs/TESTING.md)
+# CURRENT BEHAVIOUR (defect #3, see docs/TESTING.md)
 ```
 
 | # | Defect |
 |---|---|
 | 1 | `frontend_registered` blocks service unregistration on the last unload, so `services_registered` stays `True` and a reload orphans all 8 services |
-| 2 | `async_approve_chore` is not idempotent — approving twice pays out twice against one record |
 | 3 | `async_reject_reward` recomputes the price at rejection time, so chore edits between claim and reject create or destroy points |
-| 4 | `async_add_points` increments `total_chores_completed`, even for a zero-point adjustment |
 | 5 | Unloading an entry twice raises `KeyError` |
 | 6 | Rewards whose icon is not in `REWARD_ICON_OPTIONS` cannot be edited **or deleted** from the options UI — this affects 3 of the 5 seeded rewards |
 | 7 | `async_setup_entry` overwrites options-flow point settings from `entry.data` on every restart |
@@ -177,8 +208,10 @@ test-visible change. Tests that pin a bug are marked:
 | 12 | There is no `reject_reward` service, so a parent cannot deny a reward claim once made |
 | 13 | A jackpot pools every child's points in its progress bar, but `claim_reward` charges one child, so a jackpot is only claimable once a single child holds the whole cost alone. The card gates on the rule the backend enforces rather than on the pooled total |
 | 14 | The child card's breakpoints read the **viewport** width, so a card in a narrow masonry column on a wide screen gets the large-screen sizes and its chore names wrap to three lines. The `min-width: 1024px` block makes the card *bigger*, which is most of ["huge on a tablet"](https://github.com/vinnybad/choremander/issues/4). Fixing it properly means container queries, which would change how every existing dashboard renders, so `density` sidesteps it instead: the presets set one size that overrides every breakpoint at once |
+| 15 | `sensor.choremander_overview` measures ~99% of the recorder's 16KiB attribute limit for a household of five children, past which Home Assistant silently stops recording the entity. The cause is structural: `rewards[].calculated_costs` carries a per-child cost map on every reward, so the payload grows as children × rewards. `tests/unit/test_sensor_payload_size.py` measures it, ratchets it so an unrelated change cannot be the one that tips it over, and holds every other sensor to a 75% margin. Fixing it means changing the shape the rewards card reads. This is why the activity feed and the streak figures each went onto their own entity rather than into the overview |
+| 16 | Chore completions are never pruned. Streaks are derived from them on every coordinator refresh, so the per-refresh cost grows with history - measured at roughly 190ms for 50,000 completions, about three and a half years for a busy four-child family. Most of that is deserialising the completions, which the coordinator already did before streaks existed; the derivation itself is under 1ms. A retention window would fix both |
 
-Three further defects were found and **fixed** while building this suite:
+Defects **fixed** since this suite was built:
 
 - **Rewards could not be claimed at all** ([issue #3](https://github.com/vinnybad/choremander/issues/3)).
   `_renderRewardRow` drew the reward icon as decoration — no button, no handler,
@@ -191,6 +224,32 @@ Three further defects were found and **fixed** while building this suite:
 - A fresh clone could not log in at all: onboarding was committed as complete
   while the auth store was gitignored, leaving Home Assistant convinced it was
   set up but with no users. `dev/bootstrap.py` now owns onboarding.
+- **Streaks could only ever read zero** (was defect #15). `current_streak` and
+  `best_streak` were stored on every child and published by two sensors, and no
+  code path anywhere wrote them. They are now derived from the approved
+  completion history on each coordinator refresh (`streaks.py`), so there is no
+  mutable counter left to drift.
+- **`async_approve_chore` was not idempotent** (was defect #2). Approving twice
+  paid out twice against a single completion record; two parents tapping the
+  same notification was enough. It now returns early if the completion is
+  already approved.
+- **A manual bonus counted as a chore** (was defect #4). `async_add_points`
+  routed through `_award_points`, which incremented `total_chores_completed`
+  unconditionally. That counter now drives the streak card's milestones, so it
+  has to mean what it says.
+- **The reason for a points adjustment was discarded.** `add_points` and
+  `remove_points` accepted a `reason` and dropped it, leaving every manual
+  adjustment as an unexplained movement. It is now recorded in the points
+  ledger and shown on the activity card.
+- **`make validate` broke permanently the first time anyone ran `make up`.**
+  Starting the dev container leaves an empty
+  `dev/config/custom_components/choremander/` behind as its bind-mount point.
+  hassfest walks the whole mounted workspace, read that as an integration with
+  no manifest, and died on a `KeyError`. The target now exports only the files
+  git tracks, which is the tree CI checks out anyway.
+- **Reward pricing logged at WARNING on every refresh.** `CALC_COSTS:` lines,
+  three per call plus one per priced child, flooded the log of every install.
+  Demoted to DEBUG.
 
 ## Continuous integration
 

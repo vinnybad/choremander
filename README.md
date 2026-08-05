@@ -133,6 +133,10 @@ lovelace:
       type: module
     - url: /choremander/choremander-reorder-card.js
       type: module
+    - url: /choremander/choremander-activity-card.js
+      type: module
+    - url: /choremander/choremander-streak-card.js
+      type: module
 ```
 
 ### Card Index
@@ -141,11 +145,13 @@ lovelace:
 |------|-----|-------------|
 | [Child Card](#child-card) | Kids | Kid-friendly chore completion interface |
 | [Rewards Card](#rewards-card) | Kids | View available rewards and progress |
+| [Streak Card](#streak-card) | Kids | Day streaks, recent activity and milestones |
 | [Approvals Card](#approvals-card) | Parents | Approve or reject completed chores |
 | [Points Card](#points-card) | Parents | Manually add/remove points |
 | [Reorder Card](#reorder-card) | Parents | Organize chore display order per child |
+| [Activity Card](#activity-card) | Parents | Timeline of everything that happened |
 
-> **Tip:** Create separate dashboards - one for kids (Child + Rewards) and one for parents (Approvals + Points).
+> **Tip:** Create separate dashboards - one for kids (Child + Rewards + Streak) and one for parents (Approvals + Points + Activity).
 
 ---
 
@@ -228,6 +234,50 @@ animations: false   # Optional: stop the shimmer and jackpot shine
 
 ---
 
+#### Streak Card
+
+How many days in a row each child has kept going, a strip of dots for the recent
+days they were active, and the milestones they have reached. Streaks are worked
+out from the chores that were actually approved, so the number and the dots can
+never tell different stories.
+
+A day counts once, however many chores were done in it, and a streak stays alive
+until a whole day has been missed - so it does not appear to collapse the moment
+the clock passes midnight.
+
+**Visual Editor:** Add `custom:choremander-streak-card` and pick the streaks
+entity.
+
+<details>
+<summary>YAML Example</summary>
+
+```yaml
+type: custom:choremander-streak-card
+entity: sensor.choremander_streaks
+title: Streaks
+child_id: a8c8376a       # optional: one child instead of the whole family
+streak_days: 14
+achievements: next
+```
+</details>
+
+<details>
+<summary>Options</summary>
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `entity` | required | The `sensor.choremander_streaks` entity |
+| `title` | `Streaks` | Header text |
+| `child_id` | all | Show one child instead of the whole family |
+| `streak_days` | `14` | Days in the dot strip, up to 30 |
+| `achievements` | `next` | `next` (earned plus one to aim for), `earned`, `all` or `none` |
+| `show_avatar` | `true` | Show each child's avatar |
+| `density` | `default` | `default`, `cozy` or `compact` |
+| `animations` | `true` | Scales up today's dot |
+
+</details>
+
+
 ### Cards for Parents
 
 #### Approvals Card
@@ -280,16 +330,60 @@ child_id: a8c8376a
 ```
 </details>
 
+#### Activity Card
+
+A timeline of everything that has happened: chores done and approved, rewards
+claimed, and the bonuses and penalties you handed out - with the reason you gave
+for each. Answers "why does she have that many stars?" without guesswork.
+
+Chores waiting on your approval appear too, marked as such, showing what they
+are worth rather than a change that has not happened yet.
+
+**Visual Editor:** Add `custom:choremander-activity-card` and pick the activity
+entity. Everything else is optional.
+
+<details>
+<summary>YAML Example</summary>
+
+```yaml
+type: custom:choremander-activity-card
+entity: sensor.choremander_activity
+title: Activity
+child_id: a8c8376a    # optional: one child instead of the whole family
+max_items: 20
+density: compact
+```
+</details>
+
+<details>
+<summary>Options</summary>
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `entity` | required | The `sensor.choremander_activity` entity |
+| `title` | `Activity` | Header text |
+| `child_id` | all | Show only one child's activity |
+| `max_items` | `20` | Events to show. The integration keeps the most recent 40 |
+| `show_filters` | `true` | Chips to narrow to chores, rewards or bonuses |
+| `show_relative_time` | `true` | "20m ago" for recent events instead of a clock time |
+| `density` | `default` | `default`, `cozy` or `compact` |
+| `animations` | `true` | Hover and press transitions on the filter chips |
+
+</details>
+
 ---
 
-> **Note:** All cards require the `sensor.choremander_overview` entity. Child-specific cards also need a child selection.
+> **Note:** Most cards read the `sensor.choremander_overview` entity. The Activity
+> Card reads `sensor.choremander_activity` and the Streak Card reads
+> `sensor.choremander_streaks` - both are created for you. Child-specific cards
+> also need a child selection.
 
 ---
 
 ### Custom Styling
 
-If `density` does not get you where you want, the Child Card and Rewards Card
-expose every size as a CSS custom property. Set one anywhere above the card - a
+If `density` does not get you where you want, the Child, Rewards, Activity and
+Streak cards expose every size as a CSS custom property. Set one anywhere above the card - a
 Home Assistant theme, or a `card_mod` block on a single card - and it wins over
 the built-in value.
 
@@ -349,6 +443,42 @@ card_mod:
 | `--chm-reward-name-font-size` / `--chm-reward-desc-font-size` | `1.15rem` / `0.9rem` |
 | `--chm-progress-height` / `--chm-jackpot-progress-height` | `14px` / `18px` |
 | `--chm-reward-icon-size` / `--chm-reward-icon-glyph-size` | `44px` / `24px` |
+
+</details>
+
+<details>
+<summary>Activity Card properties</summary>
+
+| Property | Default |
+|---|---|
+| `--chm-header-padding` / `--chm-header-icon-size` | `16px 20px` / `32px` |
+| `--chm-header-title-font-size` | `1.4rem` |
+| `--chm-activity-filters-padding` / `--chm-activity-chip-font-size` | `12px 20px 4px` / `0.85rem` |
+| `--chm-activity-feed-padding` | `8px 20px 16px` |
+| `--chm-activity-day-label-margin` / `--chm-activity-day-label-font-size` | `16px 0 8px` / `0.75rem` |
+| `--chm-activity-event-padding` / `--chm-activity-event-gap` | `10px 0` / `12px` |
+| `--chm-activity-event-min-height` | `56px` |
+| `--chm-activity-icon-size` / `--chm-activity-icon-glyph-size` | `40px` / `22px` |
+| `--chm-activity-text-font-size` / `--chm-activity-meta-font-size` | `0.95rem` / `0.78rem` |
+| `--chm-activity-points-font-size` / `--chm-activity-points-icon-size` | `0.95rem` / `16px` |
+| `--chm-color-green`, `-red`, `-orange`, `-purple`, `-blue`, `-cyan` | the event colours |
+
+</details>
+
+<details>
+<summary>Streak Card properties</summary>
+
+| Property | Default |
+|---|---|
+| `--chm-header-padding` / `--chm-header-icon-size` | `16px 20px` / `32px` |
+| `--chm-streak-child-padding` / `--chm-streak-top-gap` | `16px 20px` / `14px` |
+| `--chm-streak-avatar-size` / `--chm-streak-avatar-glyph-size` | `52px` / `30px` |
+| `--chm-streak-name-font-size` / `--chm-streak-sub-font-size` | `1.1rem` / `0.9rem` |
+| `--chm-streak-count-font-size` / `--chm-streak-best-font-size` | `1.9rem` / `1.1rem` |
+| `--chm-streak-dot-size` / `--chm-streak-dot-gap` | `12px` / `5px` |
+| `--chm-streak-badge-size` / `--chm-streak-badge-padding` / `--chm-streak-badge-radius` | `66px` / `8px 6px` / `12px` |
+| `--chm-streak-badge-emoji-size` / `--chm-streak-badge-label-size` | `1.5rem` / `0.68rem` |
+| `--chm-color-orange` / `--chm-color-green` | the fire and today colours |
 
 </details>
 
