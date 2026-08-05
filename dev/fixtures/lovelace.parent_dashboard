@@ -89,6 +89,49 @@
               "show_avatar": false
             }
           ]
+        },
+        {
+          "title": "Misconfigured",
+          "path": "misconfigured",
+          "cards": [
+            {
+              "type": "custom:choremander-approvals-card",
+              "entity": "sensor.choremander_overview",
+              "title": "Wrong Approvals"
+            },
+            {
+              "type": "custom:choremander-activity-card",
+              "entity": "sensor.choremander_overview",
+              "title": "Wrong Activity"
+            },
+            {
+              "type": "custom:choremander-streak-card",
+              "entity": "sensor.choremander_overview",
+              "title": "Wrong Streaks"
+            },
+            {
+              "type": "custom:choremander-child-card",
+              "entity": "sensor.pending_approvals",
+              "child_id": "child_krishna",
+              "title": "Wrong Child"
+            },
+            {
+              "type": "custom:choremander-points-card",
+              "entity": "sensor.pending_approvals",
+              "title": "Wrong Points"
+            },
+            {
+              "type": "custom:choremander-reorder-card",
+              "entity": "sensor.pending_approvals",
+              "child_id": "child_krishna",
+              "title": "Wrong Reorder"
+            },
+            {
+              "type": "custom:choremander-rewards-card",
+              "entity": "sensor.pending_approvals",
+              "title": "Wrong Rewards"
+            }
+          ]
         }
       ]
     }

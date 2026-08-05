@@ -189,6 +189,11 @@ Two traps worth knowing:
   the ledger, the migration, the sensor and the card as one chain. Multi-day
   streaks cannot be staged against a live clock and live in `test_streaks.py`
   instead.
+- **`/parent/misconfigured` is wrong on purpose.** Every card on that view is
+  aimed at a real sensor that is not the one it reads, which is what
+  `misconfigured-entity.spec.ts` asserts against. Each entity there exists, so
+  "Entity not found" is not what is under test. The view is read-only — it
+  completes no chore and spends no point — so it owns no (child, chore) pair.
 
 ## Known defects
 
@@ -233,6 +238,15 @@ Defects **fixed** since this suite was built:
   `tests/unit/test_readme_card_examples.py` now holds every documented example
   to the entity its card's `getStubConfig()` names, so the two cannot drift
   apart again.
+- **A card aimed at the wrong entity was indistinguishable from an empty one.**
+  This is what let the defect above survive a fixture fix and a release: every
+  card falls back to `[]` when the attribute it reads is absent, so a card
+  pointed anywhere plausible rendered its own empty state and looked like it was
+  working. Each card now declares the data it reads in `requiredData` and says
+  which entity carries it instead of drawing an empty card. The declaration
+  reaches one level down where it has to — `sensor.choremander_overview`
+  publishes a `children` list, so only `children[].current_streak` distinguishes
+  it from the sensor the streak card actually needs.
 - A fresh clone could not log in at all: onboarding was committed as complete
   while the auth store was gitignored, leaving Home Assistant convinced it was
   set up but with no users. `dev/bootstrap.py` now owns onboarding.

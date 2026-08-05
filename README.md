@@ -111,8 +111,21 @@ The easiest way to add Choremander cards:
 1. Edit your dashboard and click **Add Card**
 2. Search for the card (e.g., "choremander-child-card") or scroll to find it under "Custom"
 3. Alternatively, add a **Manual** card and enter the card type (e.g., `custom:choremander-child-card`)
-4. The card will show a configuration interface - enter `sensor.choremander_overview` in the entity field
+4. The card will show a configuration interface - enter the entity that card reads (see below)
 5. Fill in any additional options (child selection, time of day, etc.) and save
+
+Most cards read `sensor.choremander_overview`. Three read their own sensor
+instead, because the data they need is too large to carry on the overview one:
+
+| Card | Entity |
+|------|--------|
+| Approvals Card | `sensor.pending_approvals` |
+| Activity Card | `sensor.choremander_activity` |
+| Streak Card | `sensor.choremander_streaks` |
+| Everything else | `sensor.choremander_overview` |
+
+Picking the wrong one is not silent — the card says which entity it reads rather
+than drawing an empty card.
 
 > **Tip:** If the card shows an error after adding, click on it to open the configuration panel. This is normal - it just needs to be configured!
 

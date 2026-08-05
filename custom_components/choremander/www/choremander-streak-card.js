@@ -492,6 +492,53 @@ class ChoremanderStreakCard extends LitElement {
     };
   }
 
+  /**
+   * The attributes this card reads.
+   *
+   * Every read below falls back to an empty list, so a card aimed at a
+   * real-but-wrong entity draws the same "nothing here" state as one that is
+   * working and genuinely has nothing to show. Declaring what the card needs is
+   * what lets `_missingData` tell those two apart (issue #5).
+   *
+   * A `name[].field` entry means the attribute must be a list whose entries
+   * carry that field.
+   */
+  static get requiredData() {
+    return ["children[].current_streak"];
+  }
+
+  /** Which of `requiredData` this entity does not carry. */
+  _missingData(entity) {
+    // A restarting integration republishes its entities as unavailable with no
+    // attributes at all. That is a moment, not a misconfiguration.
+    if (entity.state === "unavailable" || entity.state === "unknown") {
+      return [];
+    }
+
+    return this.constructor.requiredData.filter((path) => {
+      const [name, field] = path.split("[].");
+      const value = entity.attributes[name];
+
+      if (value === undefined) return true;
+      if (!field) return false;
+      if (!Array.isArray(value)) return true;
+
+      // An empty list carries no evidence either way; do not accuse it.
+      return value.some((item) => !item || item[field] === undefined);
+    });
+  }
+
+  _renderConfigError(missing) {
+    return html`
+      <ha-card>
+        <div class="error config-error">
+          <div>${this.config.entity} has no ${missing.join(", ")}</div>
+          <div>This card reads ${this.constructor.getStubConfig().entity}</div>
+        </div>
+      </ha-card>
+    `;
+  }
+
   // ------------------------------------------------------------- helpers
 
   /** The Home Assistant timezone, falling back to the browser's. */
@@ -582,6 +629,11 @@ class ChoremanderStreakCard extends LitElement {
           <div class="error">Entity not found: ${this.config.entity}</div>
         </ha-card>
       `;
+    }
+
+    const missing = this._missingData(entity);
+    if (missing.length) {
+      return this._renderConfigError(missing);
     }
 
     const children = this._childrenToShow(entity);
