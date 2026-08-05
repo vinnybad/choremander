@@ -29,7 +29,7 @@ from custom_components.choremander.frontend import (
     async_register_frontend,
 )
 
-MANIFEST_VERSION = "1.0.4"
+MANIFEST_VERSION = "1.1.0"
 
 
 class FakeResources:
@@ -211,7 +211,7 @@ def test_get_version_propagates_a_permission_error() -> None:
 async def test_register_cards_creates_one_versioned_resource_per_card(
     hass: HomeAssistant,
 ) -> None:
-    """All five cards are registered as versioned ES modules, in `CARDS` order."""
+    """All seven cards are registered as versioned ES modules, in `CARDS` order."""
     resources = FakeResources()
     hass.data["lovelace"] = FakeLovelace(resources)
 
@@ -219,7 +219,7 @@ async def test_register_cards_creates_one_versioned_resource_per_card(
 
     assert resources.created == [
         {"url": _versioned(card), "res_type": "module"} for card in CARDS
-    ], "the five cards should be created in CARDS order with a ?v= cache buster"
+    ], "the seven cards should be created in CARDS order with a ?v= cache buster"
     assert resources.updated == [], "nothing pre-existed, so nothing should be updated"
 
 
@@ -372,7 +372,7 @@ async def test_real_setup_registers_all_five_cards_with_lovelace(
 
     registered = [item for item in resources.async_items() if item["url"].startswith(URL_BASE)]
     assert [item["url"] for item in registered] == [_versioned(card) for card in CARDS], (
-        "all five cards should be present, versioned, and in CARDS order"
+        "all seven cards should be present, versioned, and in CARDS order"
     )
     assert {item["type"] for item in registered} == {"module"}, (
         "cards are ES modules; Lovelace stores that under the 'type' key"

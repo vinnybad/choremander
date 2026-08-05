@@ -1,13 +1,19 @@
 {
   "domain": "choremander",
   "name": "Choremander",
-  "codeowners": ["@vinnybad"],
+  "codeowners": [
+    "@vinnybad"
+  ],
   "config_flow": true,
-  "dependencies": ["http", "lovelace", "frontend"],
+  "dependencies": [
+    "http",
+    "lovelace",
+    "frontend"
+  ],
   "documentation": "https://github.com/vinnybad/choremander",
   "integration_type": "service",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/vinnybad/choremander/issues",
   "requirements": [],
-  "version": "1.0.4"
+  "version": "1.1.0"
 }

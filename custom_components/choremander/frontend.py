@@ -23,6 +23,8 @@ CARDS: Final = [
     "choremander-approvals-card.js",
     "choremander-points-card.js",
     "choremander-reorder-card.js",
+    "choremander-activity-card.js",
+    "choremander-streak-card.js",
 ]
 
 # JS modules to load globally (for config flow sound preview)

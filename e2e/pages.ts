@@ -62,6 +62,41 @@ export async function grantPoints(childId: string, points: number): Promise<void
   await callService("choremander", "add_points", { child_id: childId, points });
 }
 
+/** Read one entity's attributes over REST, reusing the bootstrap credentials. */
+export async function entityAttributes(entityId: string): Promise<Record<string, any>> {
+  const creds = JSON.parse(fs.readFileSync(path.join(repoRoot, "dev", ".token"), "utf8"));
+  const baseURL = process.env.HASS_URL ?? creds.hass_url ?? "http://localhost:8123";
+
+  const response = await fetch(`${baseURL}/api/states/${entityId}`, {
+    headers: { Authorization: `Bearer ${creds.access_token}` },
+  });
+  if (!response.ok) {
+    throw new Error(`reading ${entityId} failed (HTTP ${response.status})`);
+  }
+  return (await response.json()).attributes ?? {};
+}
+
+/**
+ * Approve the chore a child is waiting on.
+ *
+ * Approving through the API rather than by clicking the approvals card keeps
+ * the setup out of the behaviour under test - these specs are about what the
+ * activity and streak cards render, not about how approval is triggered.
+ */
+export async function approveChore(childId: string, choreId: string): Promise<void> {
+  const attributes = await entityAttributes("sensor.pending_approvals");
+  const pending: Array<Record<string, string>> = attributes.chore_completions ?? [];
+  const completion = pending.find(
+    (row) => row.child_id === childId && row.chore_id === choreId,
+  );
+  if (!completion) {
+    throw new Error(`no pending completion of ${choreId} for ${childId} to approve`);
+  }
+  await callService("choremander", "approve_chore", {
+    completion_id: completion.completion_id,
+  });
+}
+
 /**
  * Locators for the Choremander Lovelace cards.
  *
@@ -444,7 +479,158 @@ export async function openDashboard(page: Page, path: string): Promise<void> {
   // Cards render asynchronously once the websocket delivers initial state.
   await expect(
     page.locator(
-      "choremander-child-card, choremander-approvals-card, choremander-points-card, choremander-rewards-card",
+      "choremander-child-card, choremander-approvals-card, choremander-points-card, " +
+        "choremander-rewards-card, choremander-activity-card, choremander-streak-card",
     ),
   ).not.toHaveCount(0, { timeout: 30_000 });
+}
+
+/**
+ * The activity card - a timeline of everything that moved a child's balance.
+ *
+ * Rows are keyed off the icon tone class rather than off their wording, which
+ * mirrors how the card itself works: the stored `event_type` decides the tone,
+ * and the sentence is only presentation.
+ */
+/**
+ * An anchored matcher for a card's header title.
+ *
+ * `hasText` matches substrings, so a view holding both "Streaks" and "Compact
+ * Streaks" would have the first name select both cards. Every title lookup goes
+ * through here so that cannot happen by accident.
+ */
+function exactTitle(title: string): RegExp {
+  return new RegExp(`^\\s*${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`);
+}
+
+export class ActivityCard {
+  constructor(readonly root: Locator) {}
+
+  /** The first activity card on the page - the one left entirely at defaults. */
+  static default(page: Page): ActivityCard {
+    return new ActivityCard(
+      page.locator("choremander-activity-card:not([density]):not([no-animations])").first(),
+    );
+  }
+
+  static byTitle(page: Page, title: string): ActivityCard {
+    return new ActivityCard(
+      page
+        .locator("choremander-activity-card")
+        .filter({ has: page.locator(".header-title", { hasText: exactTitle(title) }) }),
+    );
+  }
+
+  static byDensity(page: Page, density: "cozy" | "compact"): ActivityCard {
+    return new ActivityCard(page.locator(`choremander-activity-card[density="${density}"]`));
+  }
+
+  get header(): Locator {
+    return this.root.locator(".card-header");
+  }
+
+  get count(): Locator {
+    return this.root.locator(".header-count");
+  }
+
+  get chips(): Locator {
+    return this.root.locator(".chip");
+  }
+
+  chip(label: string): Locator {
+    return this.root.locator(".chip", { hasText: label });
+  }
+
+  get dayLabels(): Locator {
+    return this.root.locator(".day-label");
+  }
+
+  get events(): Locator {
+    return this.root.locator(".event");
+  }
+
+  /** Rows whose icon carries a given tone, e.g. "good", "bad", "reward". */
+  eventsWithTone(tone: string): Locator {
+    return this.root.locator(`.event:has(.event-icon.${tone})`);
+  }
+
+  /** A row by the text it renders, which is what a parent actually reads. */
+  event(text: string): Locator {
+    return this.root.locator(".event", { hasText: text });
+  }
+
+  get empty(): Locator {
+    return this.root.locator(".empty-text");
+  }
+}
+
+/** The streak card - day dots, current and best streaks, and milestones. */
+export class StreakCard {
+  constructor(readonly root: Locator) {}
+
+  static default(page: Page): StreakCard {
+    return new StreakCard(page.locator("choremander-streak-card:not([density])").first());
+  }
+
+  static byTitle(page: Page, title: string): StreakCard {
+    return new StreakCard(
+      page
+        .locator("choremander-streak-card")
+        .filter({ has: page.locator(".header-title", { hasText: exactTitle(title) }) }),
+    );
+  }
+
+  static byDensity(page: Page, density: "cozy" | "compact"): StreakCard {
+    return new StreakCard(page.locator(`choremander-streak-card[density="${density}"]`));
+  }
+
+  /** One child's block inside the card. */
+  child(childId: string): Locator {
+    return this.root.locator(`.child[data-child-id="${childId}"]`);
+  }
+
+  get children(): Locator {
+    return this.root.locator(".child");
+  }
+
+  streakCount(childId: string): Locator {
+    return this.child(childId).locator(".streak-count");
+  }
+
+  bestStreak(childId: string): Locator {
+    return this.child(childId).locator(".best strong");
+  }
+
+  dots(childId: string): Locator {
+    return this.child(childId).locator(".dot");
+  }
+
+  /** Dots the child was actually active on, excluding today's own styling. */
+  activeDots(childId: string): Locator {
+    return this.child(childId).locator(".dot.active");
+  }
+
+  todayDot(childId: string): Locator {
+    return this.child(childId).locator(".dot.today");
+  }
+
+  todayIdleDot(childId: string): Locator {
+    return this.child(childId).locator(".dot.today-idle");
+  }
+
+  badges(childId: string): Locator {
+    return this.child(childId).locator(".badge");
+  }
+
+  earnedBadges(childId: string): Locator {
+    return this.child(childId).locator(".badge.earned");
+  }
+
+  lockedBadges(childId: string): Locator {
+    return this.child(childId).locator(".badge.locked");
+  }
+
+  avatar(childId: string): Locator {
+    return this.child(childId).locator(".avatar");
+  }
 }

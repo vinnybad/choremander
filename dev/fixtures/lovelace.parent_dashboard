@@ -38,6 +38,57 @@
               "title": "All Rewards"
             }
           ]
+        },
+        {
+          "title": "Activity",
+          "path": "activity",
+          "cards": [
+            {
+              "type": "custom:choremander-activity-card",
+              "entity": "sensor.choremander_activity",
+              "title": "Activity"
+            },
+            {
+              "type": "custom:choremander-activity-card",
+              "entity": "sensor.choremander_activity",
+              "title": "Compact Activity",
+              "density": "compact"
+            },
+            {
+              "type": "custom:choremander-activity-card",
+              "entity": "sensor.choremander_activity",
+              "title": "Plain Activity",
+              "show_filters": false,
+              "show_relative_time": false,
+              "max_items": 5
+            }
+          ]
+        },
+        {
+          "title": "Streaks",
+          "path": "streaks",
+          "cards": [
+            {
+              "type": "custom:choremander-streak-card",
+              "entity": "sensor.choremander_streaks",
+              "title": "Streaks"
+            },
+            {
+              "type": "custom:choremander-streak-card",
+              "entity": "sensor.choremander_streaks",
+              "title": "Compact Streaks",
+              "density": "compact",
+              "streak_days": 7
+            },
+            {
+              "type": "custom:choremander-streak-card",
+              "entity": "sensor.choremander_streaks",
+              "title": "Radha Only",
+              "child_id": "child_radha",
+              "achievements": "all",
+              "show_avatar": false
+            }
+          ]
         }
       ]
     }
