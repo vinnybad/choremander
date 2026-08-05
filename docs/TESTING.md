@@ -5,12 +5,13 @@ each catching things the others cannot.
 
 | Layer | Location | Tests | Needs a container? | What it proves |
 |---|---|---|---|---|
-| **Unit** | `tests/unit/` | 502 | No | The Python logic is correct — pricing math, the points ledger, storage and its migration, streak arithmetic, config flow, entity state and payload size |
-| **API end-to-end** | `tests/e2e/` | 24 | Yes | Real service calls against real Home Assistant move real state |
-| **Browser end-to-end** | `e2e/` | 54 | Yes | The Lovelace cards actually work when a person clicks them |
+| **Unit** | `tests/unit/` | 577 | No | The Python logic is correct — pricing math, the points ledger, storage and its migration, streak arithmetic, config flow, entity state and payload size, Lovelace resource registration and recovery |
+| **API end-to-end** | `tests/e2e/` | 29 | Yes | Real service calls against real Home Assistant move real state, and the Lovelace resource store survives startup and restarts |
+| **Browser end-to-end** | `e2e/` | 63 | Yes | The Lovelace cards actually work when a person clicks them |
 
-Unit coverage is 97% of the integration, with `coordinator.py` — the dynamic
-reward pricing — at 100%.
+Unit coverage is 99% of the integration, with `coordinator.py` — the dynamic
+reward pricing — at 99%, `frontend.py` and `repairs.py` at 100%, and
+`resource_repair.py` — the deleted-resource recovery — at 98%.
 
 ## Quick start
 
@@ -223,6 +224,25 @@ test-visible change. Tests that pin a bug are marked:
 | 16 | Chore completions are never pruned. Streaks are derived from them on every coordinator refresh, so the per-refresh cost grows with history - measured at roughly 190ms for 50,000 completions, about three and a half years for a busy four-child family. Most of that is deserialising the completions, which the coordinator already did before streaks existed; the derivation itself is under 1ms. A retention window would fix both |
 
 Defects **fixed** since this suite was built:
+
+- **Installing Choremander deleted every other integration's Lovelace resources**
+  ([issue #2](https://github.com/vinnybad/choremander/issues/2)).
+  `async_register_cards` wrote to Lovelace's `ResourceStorageCollection` before
+  it had been loaded from disk. The collection serialises whatever is in memory,
+  so the debounced save wrote out only Choremander's own seven cards and
+  truncated `.storage/lovelace_resources` — and did it again on every reboot,
+  which is why re-adding the resources by hand never stuck. No layer caught it
+  because the dev environment had no third-party resources to lose;
+  `dev/fixtures/lovelace_resources` now seeds one, and
+  `tests/e2e/test_lovelace_resources.py` asserts it survives.
+  Because the fix cannot recover rows already gone, and HACS only registers a
+  plugin's resource at install time rather than on startup, `resource_repair.py`
+  detects the wreckage and offers a one-click repair to restore it.
+
+- The YAML-mode branch of `async_register_cards` was dead code: it read
+  `lovelace_data.mode`, which `LovelaceData` does not define. It reads
+  `resource_mode` now, so YAML installs get the instructions they were meant to
+  instead of falling through to the storage path.
 
 - **Rewards could not be claimed at all** ([issue #3](https://github.com/vinnybad/choremander/issues/3)).
   `_renderRewardRow` drew the reward icon as decoration — no button, no handler,

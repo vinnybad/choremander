@@ -129,6 +129,23 @@ than drawing an empty card.
 
 > **Tip:** If the card shows an error after adding, click on it to open the configuration panel. This is normal - it just needs to be configured!
 
+### Missing cards after installing Choremander?
+
+Versions before this fix could delete the Lovelace resources belonging to your
+*other* custom cards ([issue #2](https://github.com/vinnybad/choremander/issues/2)).
+Choremander registered its own cards before Home Assistant had finished loading
+the resource list, and saving that half-loaded list overwrote everything else in
+it - on every restart, which is why re-adding the entries by hand never stuck.
+
+That no longer happens. If you were affected, Choremander looks for the cards
+your dashboards still reference but can no longer load, and offers to put them
+back: go to **Settings → System → Repairs**. It shows you exactly which
+resources it would restore before changing anything, and leaves alone anything
+you have already re-added yourself. Reload your browser afterwards.
+
+You can also restore them by hand under **Settings → Dashboards → ⋮ →
+Resources**.
+
 ### YAML Mode Users
 
 If you use Lovelace in YAML mode, add these resources to your `configuration.yaml`:
