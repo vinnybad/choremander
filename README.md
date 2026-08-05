@@ -288,14 +288,17 @@ Review and approve (or reject) completed chores that require parent approval. Sh
   <img src="images/pendingApprovals.png" alt="Pending Approvals" width="400">
 </p>
 
-**Visual Editor:** Add `custom:choremander-approvals-card` and configure the entity.
+**Visual Editor:** Add `custom:choremander-approvals-card` and configure the
+entity (`sensor.pending_approvals`). This card reads its own sensor, not the
+overview one — pointed anywhere else it shows "All caught up!" no matter what is
+waiting.
 
 <details>
 <summary>YAML Example</summary>
 
 ```yaml
 type: custom:choremander-approvals-card
-entity: sensor.choremander_overview
+entity: sensor.pending_approvals
 ```
 </details>
 

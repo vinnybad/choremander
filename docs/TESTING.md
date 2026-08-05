@@ -107,6 +107,12 @@ data onto a companion entity, never to raise the threshold** — the limit is a
 recorder database column, and `ActivitySensor` and `StreaksSensor` both exist
 for exactly this reason.
 
+`test_readme_card_examples.py` guards the documentation rather than the code: it
+reads every copyable YAML block in the README and asserts each one names the
+entity that card's `getStubConfig()` declares. A card handed the wrong sensor
+finds none of the attributes it reads and renders its empty state, so a wrong
+example looks like a working card that has nothing to show (defect below).
+
 `bypass_frontend_registration` is **opt-in, not autouse**, and should stay that
 way. `frontend.py` writes `frontend_registered` into the same `hass.data[DOMAIN]`
 dict that `__init__.py` scans on unload, so bypassing registration changes
@@ -221,6 +227,12 @@ Defects **fixed** since this suite was built:
 - The parent dashboard's approvals card was wired to `sensor.choremander_overview`,
   which has no `chore_completions` attribute, so it always showed "All caught
   up!" regardless of what was pending. Now points at `sensor.pending_approvals`.
+  The README's example carried the same wrong entity long after the dashboard
+  fixture was corrected, which is what anyone copying YAML actually hit
+  ([issue #5](https://github.com/vinnybad/choremander/issues/5)).
+  `tests/unit/test_readme_card_examples.py` now holds every documented example
+  to the entity its card's `getStubConfig()` names, so the two cannot drift
+  apart again.
 - A fresh clone could not log in at all: onboarding was committed as complete
   while the auth store was gitignored, leaving Home Assistant convinced it was
   set up but with no users. `dev/bootstrap.py` now owns onboarding.
