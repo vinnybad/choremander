@@ -234,7 +234,11 @@ async def test_overview_reports_seed_totals_and_one_row_per_child(
             "pending_points": 0,
             "chore_order": [],
         },
-    ], "each child row must carry exactly id/name/points/pending_points/chore_order in seed order"
+    ], (
+        "each child row must carry exactly id/name/points/pending_points/chore_order "
+        "in seed order; streak and lifetime figures belong on the streaks sensor, "
+        "because this payload has the least room under the 16KiB attribute ceiling"
+    )
 
 
 async def test_overview_reward_rows_carry_eleven_keys_and_dynamic_per_child_costs(
@@ -633,8 +637,9 @@ async def test_a_new_child_gains_exactly_two_sensors_and_gains_them_only_once(
 
     await sensor_platform.async_setup_entry(hass, seeded_entry, collect)
     assert len(batches) == 1, "setup adds every entity in a single call"
-    assert len(batches[0]) == 6, (
-        "the seed yields 1 overview + 2 children x 2 sensors + 1 pending-approvals sensor"
+    assert len(batches[0]) == 8, (
+        "the seed yields 1 overview + 2 children x 2 sensors + pending-approvals, "
+        "activity and streaks sensors"
     )
 
     await seeded_coordinator.async_add_child("Mira")
@@ -925,8 +930,9 @@ async def test_every_sensor_hangs_off_the_single_choremander_device(
         for entity in er.async_entries_for_config_entry(registry, ENTRY_ID)
         if entity.domain == "sensor"
     ]
-    assert len(sensor_entities) == 6, (
-        "the seed yields overview + pending approvals + 2 sensors for each of 2 children"
+    assert len(sensor_entities) == 8, (
+        "the seed yields overview + pending approvals + activity + streaks + "
+        "2 sensors for each of 2 children"
     )
     assert {entity.device_id for entity in sensor_entities} == {device.id}, (
         "every sensor must be attached to the one Choremander device"

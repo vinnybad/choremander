@@ -499,42 +499,36 @@ def test_singular_cost_wrapper_returns_the_static_cost_when_nothing_is_priced(
 # --------------------------------------------------------------------------
 
 
-def test_pricing_logs_at_warning_level_once_per_call_plus_once_per_child(
+def test_pricing_never_logs_at_warning_level(
     make_pricing_coordinator, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Pin the log volume so downgrading it to DEBUG is a deliberate change.
+    """Developer tracing must stay at DEBUG.
 
-    CURRENT BEHAVIOUR (defect: developer tracing left at WARNING, see test plan
-    section 6.5) - `calculate_dynamic_reward_costs` emits three fixed WARNINGs
-    plus one per priced child on every single call. Reading the overview
-    sensor's attributes floods the log with dozens of these.
+    `calculate_dynamic_reward_costs` runs once per reward every time the
+    overview sensor rebuilds its attributes, which is every refresh. It used to
+    emit three fixed WARNINGs plus one per priced child each time, flooding the
+    log of every install with `CALC_COSTS:` lines nobody asked for.
     """
     coordinator = make_pricing_coordinator(
         children=[child("A"), child("B")],
         chores=[chore(4)],
     )
 
-    with caplog.at_level(logging.WARNING, logger=COORDINATOR_LOGGER):
+    with caplog.at_level(logging.DEBUG, logger=COORDINATOR_LOGGER):
         coordinator.calculate_dynamic_reward_costs(reward(days_to_goal=5))
-        two_children = warnings_from_coordinator(caplog)
 
-        caplog.clear()
-        coordinator.calculate_dynamic_reward_costs(reward(assigned_to=["A"], days_to_goal=5))
-        one_child = warnings_from_coordinator(caplog)
-
-    assert len(two_children) == 5, (
-        "Pricing for two children should emit the two entry WARNINGs, one "
-        f"per-child WARNING each, and the final result WARNING. Got {two_children}"
-    )
-    assert len(one_child) == 4, (
-        f"Pricing for a single child should emit exactly four WARNINGs. Got {one_child}"
-    )
+        assert warnings_from_coordinator(caplog) == [], (
+            "pricing a reward must not warn; this is routine, expected work"
+        )
+        assert any("CALC_COSTS" in record.getMessage() for record in caplog.records), (
+            "the tracing is still there, just at DEBUG where it belongs"
+        )
 
 
-def test_override_pricing_stops_logging_after_the_two_entry_warnings(
+def test_override_pricing_is_also_silent(
     make_pricing_coordinator, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """The override branch returns before the per-child and result WARNINGs."""
+    """The override branch returns early, and equally quietly."""
     coordinator = make_pricing_coordinator(
         children=[child("A"), child("B")],
         chores=[chore(4)],
@@ -542,12 +536,8 @@ def test_override_pricing_stops_logging_after_the_two_entry_warnings(
 
     with caplog.at_level(logging.WARNING, logger=COORDINATOR_LOGGER):
         coordinator.calculate_dynamic_reward_costs(reward(cost=25, override_point_value=True))
-        emitted = warnings_from_coordinator(caplog)
 
-    assert len(emitted) == 2, (
-        "A manually priced reward short-circuits before the per-child and final "
-        f"WARNINGs, leaving only the two entry lines. Got {emitted}"
-    )
+    assert warnings_from_coordinator(caplog) == []
 
 
 def test_get_child_daily_points_is_silent(

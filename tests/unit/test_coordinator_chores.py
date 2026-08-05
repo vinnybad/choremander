@@ -262,15 +262,15 @@ async def test_approving_a_pending_completion_pays_the_chore_points(
     )
 
 
-async def test_approving_the_same_completion_twice_pays_twice(
+async def test_approving_the_same_completion_twice_pays_only_once(
     coordinator: ChoremanderCoordinator,
 ) -> None:
-    """CURRENT BEHAVIOUR (defect #2, see test plan §6.2) - approve is not idempotent.
+    """Approve is idempotent.
 
-    `async_approve_chore` never checks `completion.approved`, so every call
-    re-runs `_award_points`. A parent who double-taps Approve pays the child
-    twice against a single completion record. This test pins today's behaviour
-    so that a future fix shows up as a deliberate change.
+    `async_approve_chore` used to award points every time it was called,
+    without checking `completion.approved`. A parent who double-tapped Approve,
+    or two parents who both saw the notification, paid the child twice against
+    a single completion record.
     """
     child = await _make_child(coordinator, "Krishna", points=25)
     chore = await _make_chore(coordinator, "Do Homework", points=5, requires_approval=True)
@@ -282,15 +282,16 @@ async def test_approving_the_same_completion_twice_pays_twice(
     await coordinator.async_approve_chore(completion.id)
 
     after = coordinator.get_child(child.id)
-    assert after.points == 35, (
-        "second approval pays another 5 - the guard that should make this a no-op does not exist"
-    )
-    assert after.total_points_earned == 10, "lifetime earnings are double-counted too"
-    assert after.total_chores_completed == 2, (
-        "the lifetime chore count is incremented per approval, not per completion"
+    assert after.points == 30, "the second approval is a no-op"
+    assert after.total_points_earned == 5, "lifetime earnings are not double-counted"
+    assert after.total_chores_completed == 1, (
+        "the lifetime chore count follows completions, not approval taps"
     )
     assert len(coordinator.storage.get_completions()) == 1, (
-        "there is still only one completion record backing the double payout"
+        "there is still only one completion record"
+    )
+    assert len(coordinator.storage.get_points_transactions()) == 1, (
+        "and only one ledger entry, so the balance and the ledger still agree"
     )
 
 
@@ -372,11 +373,12 @@ async def test_rejecting_an_already_paid_completion_claws_the_points_back(
     assert coordinator.storage.get_completions() == [], (
         "a rejected completion record is deleted outright, not marked rejected"
     )
-    assert after.total_points_earned == 3, (
-        "CURRENT BEHAVIOUR: lifetime earnings are not rolled back on rejection"
+    assert after.total_points_earned == 0, (
+        "lifetime earnings are rolled back too - the work was not accepted"
     )
-    assert after.total_chores_completed == 1, (
-        "CURRENT BEHAVIOUR: the lifetime chore count is not rolled back either"
+    assert after.total_chores_completed == 0, (
+        "and so is the lifetime chore count, which now drives the streak card's "
+        "milestones and would otherwise overstate the work done forever"
     )
 
 

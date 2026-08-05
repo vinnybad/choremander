@@ -16,7 +16,8 @@ from datetime import datetime
 
 import logging
 
-from .const import DOMAIN
+from .activity import build_activity_feed
+from .const import ACTIVITY_FEED_LIMIT, DOMAIN
 from .coordinator import ChoremanderCoordinator
 from .models import Child, Chore, Reward
 
@@ -47,6 +48,10 @@ async def async_setup_entry(
 
     # Add pending approvals sensor
     entities.append(PendingApprovalsSensor(coordinator, entry))
+
+    # Add activity feed and streak sensors
+    entities.append(ActivitySensor(coordinator, entry))
+    entities.append(StreaksSensor(coordinator, entry))
 
     async_add_entities(entities)
 
@@ -220,7 +225,22 @@ class ChoremandorOverallStatsSensor(ChoremandorBaseSensor):
             "total_chores_completed": total_chores_completed,
             "points_name": data.get("points_name", "Stars"),
             "points_icon": data.get("points_icon", "mdi:star"),
-            "children": [{"id": c.id, "name": c.name, "points": c.points, "pending_points": pending_points_by_child.get(c.id, 0), "chore_order": c.chore_order} for c in children],
+            # Deliberately lean. This payload already carries every chore and
+            # every reward with its per-child calculated costs, which grows as
+            # children x rewards, and tests/unit/test_sensor_payload_size.py
+            # shows a large household leaving little room under the recorder's
+            # 16KiB attribute ceiling. Streak and lifetime figures live on
+            # sensor.choremander_streaks instead of being added here.
+            "children": [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "points": c.points,
+                    "pending_points": pending_points_by_child.get(c.id, 0),
+                    "chore_order": c.chore_order,
+                }
+                for c in children
+            ],
             "chores": chores_list,
             "rewards": rewards_list,
             "todays_completions": todays_completions,
@@ -412,4 +432,133 @@ class PendingApprovalsSensor(ChoremandorBaseSensor):
             "pending_reward_claims": len(pending_rewards),
             "chore_completions": completion_details,
             "reward_claims": reward_details,
+        }
+
+
+class ActivitySensor(ChoremandorBaseSensor):
+    """Sensor carrying the family's recent activity.
+
+    This lives on its own entity rather than being folded into the overview
+    sensor. The overview payload already carries every chore and reward with
+    their per-child calculated costs, and Home Assistant's recorder drops any
+    state whose attributes exceed 16KiB. Growing an already-large attribute set
+    with an unbounded feed is how that limit gets hit; a separate entity keeps
+    the two budgets independent.
+    """
+
+    def __init__(
+        self,
+        coordinator: ChoremandorCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_activity"
+        self._attr_name = "Choremander Activity"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int:
+        """Return the number of events in the published feed."""
+        return len(self._feed())
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        """Return the unit of measurement."""
+        return "events"
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:timeline-text"
+
+    def _feed(self) -> list[dict]:
+        """Build the activity feed from the coordinator's current data."""
+        data = self.coordinator.data or {}
+        return build_activity_feed(
+            transactions=data.get("points_transactions", []),
+            pending_completions=data.get("pending_completions", []),
+            children=data.get("children", []),
+            chores=data.get("chores", []),
+            rewards=data.get("rewards", []),
+            limit=ACTIVITY_FEED_LIMIT,
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return additional attributes."""
+        data = self.coordinator.data or {}
+        return {
+            "events": self._feed(),
+            "points_name": data.get("points_name", "Stars"),
+            "points_icon": data.get("points_icon", "mdi:star"),
+            "children": [
+                {"id": c.id, "name": c.name, "avatar": c.avatar}
+                for c in data.get("children", [])
+            ],
+        }
+
+
+class StreaksSensor(ChoremandorBaseSensor):
+    """Sensor carrying each child's streak and lifetime figures.
+
+    Separate from the overview sensor for the same reason the activity feed is:
+    the overview payload grows with children x rewards and has the least room
+    to spare, while this one grows only with the number of children.
+
+    The streak numbers here are derived from the approved completion history on
+    every refresh rather than read from storage, so they cannot drift out of
+    step with the chores that produced them.
+    """
+
+    def __init__(
+        self,
+        coordinator: ChoremandorCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_streaks"
+        self._attr_name = "Choremander Streaks"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int:
+        """Return the longest streak currently running in the household."""
+        children = (self.coordinator.data or {}).get("children", [])
+        return max((c.current_streak for c in children), default=0)
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        """Return the unit of measurement."""
+        return "days"
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:fire"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return additional attributes."""
+        data = self.coordinator.data or {}
+        streaks = data.get("streaks", {})
+        return {
+            "children": [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "avatar": c.avatar,
+                    "current_streak": c.current_streak,
+                    "best_streak": c.best_streak,
+                    "total_chores_completed": c.total_chores_completed,
+                    "total_points_earned": c.total_points_earned,
+                    # Only the days the child was actually active inside the
+                    # window. The card knows the window and fills in the gaps,
+                    # which keeps this proportional to activity rather than to
+                    # the length of the window.
+                    "active_days": streaks.get(c.id, {}).get("active_days", []),
+                }
+                for c in data.get("children", [])
+            ],
         }

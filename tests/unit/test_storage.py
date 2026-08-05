@@ -20,12 +20,14 @@ from __future__ import annotations
 from collections.abc import Callable
 import copy
 from datetime import UTC, datetime
+import inspect
 import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 import pytest
 
+from custom_components.choremander.coordinator import ChoremanderCoordinator
 from custom_components.choremander.models import (
     Child,
     Chore,
@@ -48,6 +50,7 @@ DEFAULT_KEYS = {
     "rewards",
     "completions",
     "reward_claims",
+    "points_transactions",
     "points_name",
     "points_icon",
 }
@@ -103,7 +106,7 @@ def _track_saves(storage: ChoremanderStorage) -> list[None]:
 # ---------------------------------------------------------------------------
 
 
-async def test_async_load_seeds_exactly_seven_default_keys_when_no_store_file(
+async def test_async_load_seeds_exactly_eight_default_keys_when_no_store_file(
     hass: HomeAssistant, hass_storage: dict[str, Any]
 ) -> None:
     """A first-run install gets empty collections plus the Stars defaults."""
@@ -112,10 +115,11 @@ async def test_async_load_seeds_exactly_seven_default_keys_when_no_store_file(
     data = await storage.async_load()
 
     assert set(data) == DEFAULT_KEYS, (
-        f"a brand-new install must seed exactly the seven documented keys; got {sorted(data)}"
+        f"a brand-new install must seed exactly the eight documented keys; got {sorted(data)}"
     )
     assert data["children"] == [] and data["chores"] == [] and data["rewards"] == []
     assert data["completions"] == [] and data["reward_claims"] == []
+    assert data["points_transactions"] == [], "the ledger starts empty"
     assert data["points_name"] == "Stars", "default currency name is Stars"
     assert data["points_icon"] == "mdi:star", "default currency icon is mdi:star"
     assert "pending_completions" not in data and "pending_reward_claims" not in data, (
@@ -880,14 +884,18 @@ async def test_removing_a_child_does_not_cascade_to_chores_or_completions(
     assert len(storage.data["reward_claims"]) == 1, "pending claims are orphaned"
 
 
-def test_storage_exposes_no_remove_reward_claim_method() -> None:
-    """The coordinator deletes claims by reaching into `_data` directly."""
-    assert not hasattr(ChoremanderStorage, "remove_reward_claim"), (
-        "there is deliberately no remove_reward_claim; coordinator."
-        "async_reject_reward filters storage._data['reward_claims'] itself, so "
-        "adding this method without updating the coordinator would leave that "
-        "private coupling in place"
-    )
+def test_remove_reward_claim_is_the_only_way_the_coordinator_deletes_a_claim() -> None:
+    """Rejecting a claim goes through storage, not through its private dict.
+
+    `async_reject_reward` used to filter `storage._data["reward_claims"]` in
+    place. Every other collection has a remove_* method; this one now does too,
+    and the coordinator must not reach past it.
+    """
+    assert hasattr(ChoremanderStorage, "remove_reward_claim")
+
+    source = inspect.getsource(ChoremanderCoordinator.async_reject_reward)
+    assert "storage.remove_reward_claim" in source
+    assert "_data" not in source, "async_reject_reward must not touch storage._data directly"
 
 
 # ---------------------------------------------------------------------------
@@ -934,7 +942,7 @@ async def test_each_config_entry_gets_its_own_namespaced_store_file(
 
     assert s1._store.key == "choremander.storage.entry_a"
     assert s2._store.key == "choremander.storage.entry_b"
-    assert s1._store.version == STORAGE_VERSION == 1
+    assert s1._store.version == STORAGE_VERSION == 2
 
     await s1.async_load()
     s1.add_child(Child(name="A", id="a"))
@@ -969,9 +977,10 @@ async def test_async_save_preserves_unrecognised_top_level_keys(
     reloaded = ChoremanderStorage(hass, "keeper")
     data = await reloaded.async_load()
 
-    assert set(data) == original_keys, (
+    assert set(data) == original_keys | {"points_transactions"}, (
         "storage writes self._data verbatim, so keys it never reads - "
-        "pending_completions / pending_reward_claims - must not be dropped"
+        "pending_completions / pending_reward_claims - must not be dropped; "
+        "the ledger key is the one thing load is allowed to add"
     )
     assert reloaded.get_points_name() == "Coins", "the edit was persisted"
     assert hass_storage["choremander.storage.keeper"]["version"] == STORAGE_VERSION
@@ -1015,16 +1024,27 @@ async def test_dev_seed_round_trips_losslessly_and_materialises_model_defaults(
     krishna = storage.get_child("child_krishna")
     assert krishna is not None
     assert krishna.avatar == "mdi:account-circle"
-    assert krishna.current_streak == 0 and krishna.best_streak == 0, (
-        "streaks are persisted but never written by any code path"
-    )
     assert krishna.pending_rewards == [] and krishna.chore_order == []
+    # The persisted streak fields are vestigial: the coordinator derives the
+    # real figures from the completion history on every refresh and overwrites
+    # whatever storage happened to be holding. Storage itself must not invent
+    # a value.
+    assert krishna.current_streak == 0 and krishna.best_streak == 0, (
+        "storage returns the stored streak values verbatim; deriving them is "
+        "the coordinator's job, covered in test_streaks.py"
+    )
 
+    loaded = dict(storage.data)
     await storage.async_save()
     reloaded = ChoremanderStorage(hass, "seed")
     data = await reloaded.async_load()
 
-    assert data == pristine, (
-        "deserializing and re-saving the seed must be byte-for-byte idempotent; "
-        "storage only ever writes back the dict it read"
+    assert data == loaded, (
+        "deserializing and re-saving must be idempotent; storage only ever "
+        "writes back the dict it read"
+    )
+    assert data == {**pristine, "points_transactions": []}, (
+        "the only key load adds is the ledger, and only because a file written "
+        "by hand or restored from a v1 backup may not carry it; every other "
+        "key must survive untouched"
     )

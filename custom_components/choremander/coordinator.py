@@ -1,7 +1,7 @@
 """Data coordinator for Choremander integration."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import logging
 from typing import Any
 
@@ -9,9 +9,20 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
-from .models import Child, Chore, ChoreCompletion, Reward, RewardClaim
+from .const import (
+    ACTIVE_DAYS_WINDOW,
+    DOMAIN,
+    EVENT_CHORE_APPROVED,
+    EVENT_CHORE_REJECTED,
+    EVENT_POINTS_ADDED,
+    EVENT_POINTS_REMOVED,
+    EVENT_REWARD_CLAIMED,
+    EVENT_REWARD_REFUNDED,
+    MAX_REASON_LENGTH,
+)
+from .models import Child, Chore, ChoreCompletion, PointsTransaction, Reward, RewardClaim
 from .storage import ChoremanderStorage
+from .streaks import compute_streaks, recent_active_days
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,17 +48,126 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from storage."""
+        children = self.storage.get_children()
+        completions = self.storage.get_completions()
+        streaks = self._build_streak_summary(children, completions)
+
+        # The stored streak fields are not trusted - they are recomputed here
+        # from the completion history on every refresh, so this is the value
+        # every sensor and card sees. See streaks.py for why.
+        for child in children:
+            self._apply_streak(child, streaks)
+
         return {
-            "children": self.storage.get_children(),
+            "children": children,
             "chores": self.storage.get_chores(),
             "rewards": self.storage.get_rewards(),
-            "completions": self.storage.get_completions(),
-            "pending_completions": self.storage.get_pending_completions(),
+            "completions": completions,
+            "pending_completions": [c for c in completions if not c.approved],
             "reward_claims": self.storage.get_reward_claims(),
             "pending_reward_claims": self.storage.get_pending_reward_claims(),
+            "points_transactions": self.storage.get_points_transactions(),
             "points_name": self.storage.get_points_name(),
             "points_icon": self.storage.get_points_icon(),
+            "streaks": streaks,
         }
+
+    # Streaks
+    def _build_streak_summary(
+        self,
+        children: list[Child],
+        completions: list[ChoreCompletion],
+    ) -> dict[str, dict[str, Any]]:
+        """Derive every child's streak figures from the completion history.
+
+        A day counts if the child *did the work* on it, approved or not. Waiting
+        on a parent must not break a streak: a child who does their chores every
+        day but whose parent only approves at the weekend would otherwise watch
+        their streak read zero for days and then snap back to five, which is
+        both wrong and impossible to explain.
+
+        Rejected work does not keep a streak alive either, and needs no special
+        handling here - rejecting a completion deletes the record, so the day
+        simply stops being active on the next refresh. That self-correction is
+        the whole reason for deriving these figures instead of counting them.
+        """
+        today = dt_util.now().date()
+
+        active_days: dict[str, set[date]] = {}
+        for completion in completions:
+            # Bucket by the day it was local time in this house, not UTC, or a
+            # chore done at 8pm in a negative-offset timezone lands on tomorrow.
+            local_day = dt_util.as_local(completion.completed_at).date()
+            active_days.setdefault(completion.child_id, set()).add(local_day)
+
+        summary: dict[str, dict[str, Any]] = {}
+        for child in children:
+            days = active_days.get(child.id, set())
+            current, best = compute_streaks(days, today)
+            summary[child.id] = {
+                "current_streak": current,
+                "best_streak": best,
+                "active_days": recent_active_days(days, today, ACTIVE_DAYS_WINDOW),
+            }
+        return summary
+
+    def _apply_streak(
+        self, child: Child, streaks: dict[str, dict[str, Any]] | None = None
+    ) -> None:
+        """Overwrite a child's streak fields with the derived values."""
+        if streaks is None:
+            streaks = (self.data or {}).get("streaks") or {}
+        summary = streaks.get(child.id)
+        if summary is None:
+            # No cached summary yet - first load, or a child added since the
+            # last refresh. Derive just this one.
+            summary = self._build_streak_summary(
+                [child], self.storage.get_completions()
+            )[child.id]
+        child.current_streak = summary["current_streak"]
+        child.best_streak = summary["best_streak"]
+
+    # Points ledger
+    def _record_transaction(
+        self,
+        child_id: str,
+        points: int,
+        event_type: str,
+        reason: str = "",
+        chore_id: str = "",
+        reward_id: str = "",
+        related_id: str = "",
+    ) -> None:
+        """Append a ledger entry describing a change to a child's balance.
+
+        ``points`` is the amount the balance actually moved by, which is not
+        always the amount that was asked for - balances are clamped at zero, so
+        removing 50 points from a child who has 20 is recorded as -20. The
+        ledger has to agree with the balance it explains.
+        """
+        if not points and event_type in (EVENT_POINTS_ADDED, EVENT_POINTS_REMOVED):
+            # A manual adjustment of nothing is not an event; there is neither a
+            # movement to account for nor anything a parent needs to see. A
+            # zero-point *chore* is still worth recording, because the activity
+            # feed exists to answer "I did this, where is it?" - and a chore
+            # that vanished on approval would answer it badly.
+            return
+        self.storage.add_points_transaction(
+            PointsTransaction(
+                child_id=child_id,
+                points=points,
+                event_type=event_type,
+                created_at=dt_util.now(),
+                # Free text a parent typed, so it is unbounded at the service
+                # boundary. The whole feed shares one entity's 16KiB attribute
+                # budget, and exceeding it makes Home Assistant stop recording
+                # the entity with no error anywhere.
+                reason=reason[:MAX_REASON_LENGTH],
+                chore_id=chore_id,
+                reward_id=reward_id,
+                related_id=related_id,
+            )
+        )
 
     # Child operations
     async def async_add_child(self, name: str, avatar: str = "mdi:account-circle") -> Child:
@@ -71,8 +191,11 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         await self.async_refresh()
 
     def get_child(self, child_id: str) -> Child | None:
-        """Get a child by ID."""
-        return self.storage.get_child(child_id)
+        """Get a child by ID, with derived streak figures applied."""
+        child = self.storage.get_child(child_id)
+        if child is not None:
+            self._apply_streak(child)
+        return child
 
     # Chore operations
     async def async_add_chore(
@@ -184,7 +307,7 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         all_children = self.storage.get_children()
         all_chores = self.storage.get_chores()
 
-        _LOGGER.warning(
+        _LOGGER.debug(
             "CALC_COSTS: reward=%s, override=%s, days_to_goal=%s, cost=%s, assigned_to=%s",
             reward.name,
             getattr(reward, 'override_point_value', False),
@@ -192,7 +315,7 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
             reward.cost,
             reward.assigned_to
         )
-        _LOGGER.warning("CALC_COSTS: found %d children, %d chores", len(all_children), len(all_chores))
+        _LOGGER.debug("CALC_COSTS: found %d children, %d chores", len(all_children), len(all_chores))
 
         # Determine which children are assigned to this reward
         if reward.assigned_to:
@@ -249,7 +372,7 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
                 daily_points += daily_expected
 
             child_daily_points[child.id] = daily_points
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "CALC_COSTS: child=%s, chores_counted=%d, daily_points=%.2f",
                 child.name, chores_counted, daily_points
             )
@@ -283,7 +406,7 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
                         child.name, reward.cost
                     )
 
-        _LOGGER.warning("CALC_COSTS: final result for %s = %s", reward.name, result)
+        _LOGGER.debug("CALC_COSTS: final result for %s = %s", reward.name, result)
         return result
 
     def get_child_daily_points(self, reward: Reward) -> dict[str, float]:
@@ -429,6 +552,13 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
             completion.approved = True
             completion.approved_at = dt_util.now()
             completion.points_awarded = chore.points
+            self._record_transaction(
+                child_id=child_id,
+                points=chore.points,
+                event_type=EVENT_CHORE_APPROVED,
+                chore_id=chore_id,
+                related_id=completion.id,
+            )
 
         self.storage.add_completion(completion)
         await self.storage.async_save()
@@ -440,6 +570,15 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         completions = self.storage.get_completions()
         for completion in completions:
             if completion.id == completion_id:
+                if completion.approved:
+                    # Approving twice would award the points twice. Two parents
+                    # tapping the same approval, or a double-tap on a slow
+                    # connection, is enough to hit this.
+                    _LOGGER.debug(
+                        "Completion %s is already approved; ignoring", completion_id
+                    )
+                    return
+
                 chore = self.get_chore(completion.chore_id)
                 child = self.get_child(completion.child_id)
 
@@ -449,6 +588,13 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
                     completion.points_awarded = chore.points
                     await self._award_points(child, chore.points)
                     self.storage.update_completion(completion)
+                    self._record_transaction(
+                        child_id=child.id,
+                        points=chore.points,
+                        event_type=EVENT_CHORE_APPROVED,
+                        chore_id=chore.id,
+                        related_id=completion.id,
+                    )
                     await self.storage.async_save()
                     await self.async_refresh()
                 return
@@ -458,15 +604,39 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         completions = self.storage.get_completions()
         for completion in completions:
             if completion.id == completion_id:
-                # If points were already awarded, deduct them
-                if completion.points_awarded > 0:
+                # Gated on `approved`, not on `points_awarded > 0`. Approval is
+                # what moved anything: it credits the balance *and* increments
+                # the lifetime chore count, and it does the latter even for a
+                # chore worth zero points. Keying the rollback on the points
+                # instead left a zero-point chore permanently counted as work
+                # done - which now unlocks streak-card milestones - and left its
+                # row in the activity feed with nothing to say it was undone.
+                if completion.approved:
                     child = self.get_child(completion.child_id)
                     if child:
-                        child.points -= completion.points_awarded
-                        # Ensure points don't go negative
-                        if child.points < 0:
-                            child.points = 0
+                        # Record what the balance actually moved by. A child
+                        # who has spent the points since cannot go negative, so
+                        # the clawback can be smaller than the original award.
+                        before = child.points
+                        child.points = max(0, before - completion.points_awarded)
+                        # The lifetime counters have to come back too. They now
+                        # drive the streak card's milestones, so a rejected
+                        # chore that left them alone would permanently overstate
+                        # how much work a child had done.
+                        child.total_points_earned = max(
+                            0, child.total_points_earned - completion.points_awarded
+                        )
+                        child.total_chores_completed = max(
+                            0, child.total_chores_completed - 1
+                        )
                         self.storage.update_child(child)
+                        self._record_transaction(
+                            child_id=child.id,
+                            points=child.points - before,
+                            event_type=EVENT_CHORE_REJECTED,
+                            chore_id=completion.chore_id,
+                            related_id=completion.id,
+                        )
                 break
 
         self.storage.remove_completion(completion_id)
@@ -500,6 +670,13 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         # Deduct points immediately using the effective cost
         child.points -= effective_cost
         self.storage.update_child(child)
+        self._record_transaction(
+            child_id=child_id,
+            points=-effective_cost,
+            event_type=EVENT_REWARD_CLAIMED,
+            reward_id=reward_id,
+            related_id=claim.id,
+        )
 
         self.storage.add_reward_claim(claim)
         await self.storage.async_save()
@@ -531,10 +708,14 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
                     effective_cost = costs.get(claim.child_id, reward.cost)
                     child.points += effective_cost
                     self.storage.update_child(child)
-                self.storage._data["reward_claims"] = [
-                    c for c in self.storage._data.get("reward_claims", [])
-                    if c.get("id") != claim_id
-                ]
+                    self._record_transaction(
+                        child_id=child.id,
+                        points=effective_cost,
+                        event_type=EVENT_REWARD_REFUNDED,
+                        reward_id=reward.id,
+                        related_id=claim.id,
+                    )
+                self.storage.remove_reward_claim(claim_id)
                 await self.storage.async_save()
                 await self.async_refresh()
                 return
@@ -545,7 +726,16 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         child = self.get_child(child_id)
         if not child:
             raise ValueError(f"Child {child_id} not found")
-        await self._award_points(child, points)
+        before = child.points
+        await self._award_points(child, points, count_as_chore=False)
+        # The movement, not the request. They are equal today because nothing
+        # clamps an award, but the ledger's contract is about what happened.
+        self._record_transaction(
+            child_id=child_id,
+            points=child.points - before,
+            event_type=EVENT_POINTS_ADDED,
+            reason=reason,
+        )
         await self.storage.async_save()
         await self.async_refresh()
 
@@ -554,16 +744,31 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         child = self.get_child(child_id)
         if not child:
             raise ValueError(f"Child {child_id} not found")
-        child.points = max(0, child.points - points)
+        before = child.points
+        child.points = max(0, before - points)
         self.storage.update_child(child)
+        self._record_transaction(
+            child_id=child_id,
+            points=child.points - before,
+            event_type=EVENT_POINTS_REMOVED,
+            reason=reason,
+        )
         await self.storage.async_save()
         await self.async_refresh()
 
-    async def _award_points(self, child: Child, points: int) -> None:
-        """Award points to a child."""
+    async def _award_points(
+        self, child: Child, points: int, count_as_chore: bool = True
+    ) -> None:
+        """Award points to a child.
+
+        ``count_as_chore`` exists because a manual bonus is not a chore. Adding
+        one used to increment the lifetime chore counter, which quietly
+        overstated how much work a child had actually done.
+        """
         child.points += points
         child.total_points_earned += points
-        child.total_chores_completed += 1
+        if count_as_chore:
+            child.total_chores_completed += 1
 
         self.storage.update_child(child)
 

@@ -240,6 +240,64 @@ class ChoreCompletion:
 
 
 @dataclass
+class PointsTransaction:
+    """A single change to a child's points balance.
+
+    Every path that moves points writes one of these, so the ledger is a
+    complete account of why a balance is what it is. ``event_type`` is a stable
+    identifier from const.POINTS_EVENT_TYPES rather than a sentence, and
+    ``reason`` carries only the free text a parent actually typed. Keeping those
+    two apart is what lets a card classify, colour and filter an entry without
+    parsing prose, and lets the wording change later without rewriting history.
+
+    ``points`` is signed: positive credits the child, negative debits them.
+    """
+
+    child_id: str
+    points: int
+    event_type: str
+    created_at: datetime
+    reason: str = ""
+    chore_id: str = ""
+    reward_id: str = ""
+    # The completion or claim this entry accounts for, so a card can tie a
+    # ledger entry back to the record that caused it.
+    related_id: str = ""
+    id: str = field(default_factory=generate_id)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> PointsTransaction:
+        """Create a PointsTransaction from a dictionary."""
+        created_at = parse_datetime(data.get("created_at"))
+
+        return cls(
+            child_id=data.get("child_id", ""),
+            points=data.get("points", 0),
+            event_type=data.get("event_type", ""),
+            created_at=created_at or datetime.now(timezone.utc),
+            reason=data.get("reason", ""),
+            chore_id=data.get("chore_id", ""),
+            reward_id=data.get("reward_id", ""),
+            related_id=data.get("related_id", ""),
+            id=data.get("id", generate_id()),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "child_id": self.child_id,
+            "points": self.points,
+            "event_type": self.event_type,
+            "created_at": format_datetime(self.created_at),
+            "reason": self.reason,
+            "chore_id": self.chore_id,
+            "reward_id": self.reward_id,
+            "related_id": self.related_id,
+            "id": self.id,
+        }
+
+
+@dataclass
 class RewardClaim:
     """Represents a reward claim."""
 

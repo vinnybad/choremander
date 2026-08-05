@@ -7,13 +7,38 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN
-from .models import Child, Chore, ChoreCompletion, Reward, RewardClaim
+from .const import DOMAIN, MAX_POINTS_TRANSACTIONS
+from .migration import migrate_v1_to_v2
+from .models import Child, Chore, ChoreCompletion, PointsTransaction, Reward, RewardClaim
 
 _LOGGER = logging.getLogger(__name__)
 
-STORAGE_VERSION = 1
+# Version 2 added the points ledger. Bumping the version - rather than quietly
+# defaulting a missing key on load - is what lets Home Assistant call the
+# migration exactly once, on data it knows is old.
+STORAGE_VERSION = 2
 STORAGE_KEY = f"{DOMAIN}.storage"
+
+
+class ChoremanderStore(Store):
+    """Store that upgrades older Choremander payloads on load."""
+
+    async def _async_migrate_func(
+        self,
+        old_major_version: int,
+        old_minor_version: int,
+        old_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Bring ``old_data`` up to the current storage version."""
+        _LOGGER.info(
+            "Migrating Choremander storage from version %s.%s to %s",
+            old_major_version,
+            old_minor_version,
+            STORAGE_VERSION,
+        )
+        if old_major_version < 2:
+            old_data = migrate_v1_to_v2(old_data)
+        return old_data
 
 
 class ChoremanderStorage:
@@ -23,7 +48,7 @@ class ChoremanderStorage:
         """Initialize storage."""
         self.hass = hass
         self.entry_id = entry_id
-        self._store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry_id}")
+        self._store = ChoremanderStore(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry_id}")
         self._data: dict[str, Any] = {}
 
     async def async_load(self) -> dict[str, Any]:
@@ -36,10 +61,16 @@ class ChoremanderStorage:
                 "rewards": [],
                 "completions": [],
                 "reward_claims": [],
+                "points_transactions": [],
                 "points_name": "Stars",
                 "points_icon": "mdi:star",
             }
         self._data = data
+
+        # A file written by version 2 always has this key, but a hand-edited or
+        # restored-from-backup file might not, and every read below assumes it.
+        if not isinstance(self._data.get("points_transactions"), list):
+            self._data["points_transactions"] = []
 
         # Run data migrations
         await self._migrate_assigned_to_child_ids()
@@ -270,6 +301,37 @@ class ChoremanderStorage:
             if c.get("id") == claim.id:
                 claims[i] = claim.to_dict()
                 return
+
+    def remove_reward_claim(self, claim_id: str) -> None:
+        """Remove a reward claim."""
+        self._data["reward_claims"] = [
+            c for c in self._data.get("reward_claims", []) if c.get("id") != claim_id
+        ]
+
+    # Points ledger
+    def get_points_transactions(self) -> list[PointsTransaction]:
+        """Get all points transactions, oldest first."""
+        return [
+            PointsTransaction.from_dict(t)
+            for t in self._data.get("points_transactions", [])
+        ]
+
+    def add_points_transaction(self, transaction: PointsTransaction) -> None:
+        """Append a transaction, trimming the buffer to its ceiling.
+
+        Trimming happens here, at the single point of append, so there is no
+        way to add an entry and forget to bound the list.
+        """
+        ledger = self._data.setdefault("points_transactions", [])
+        if not isinstance(ledger, list):
+            ledger = []
+            self._data["points_transactions"] = ledger
+        ledger.append(transaction.to_dict())
+        # Guarded rather than written as del ledger[:-MAX]: at a cap of zero
+        # that slice deletes nothing, so the buffer would grow without bound
+        # in exactly the configuration meant to hold least.
+        if len(ledger) > MAX_POINTS_TRANSACTIONS:
+            del ledger[: len(ledger) - MAX_POINTS_TRANSACTIONS]
 
     # Settings
     def get_points_name(self) -> str:

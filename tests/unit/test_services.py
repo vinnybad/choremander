@@ -160,10 +160,11 @@ async def test_add_points_accepts_zero_despite_the_yaml_minimum_of_one(
 
     after = coordinator.get_child(child.id)
     assert after.points == 0, "adding zero points must not change the balance"
-    # CURRENT BEHAVIOUR (defect #4, see test plan 6.2) - `_award_points` bumps
-    # the lifetime chore counter even for a zero-point manual adjustment.
-    assert after.total_chores_completed == 1, (
-        "a zero-point bonus still inflates total_chores_completed"
+    assert after.total_chores_completed == 0, (
+        "a manual adjustment is not a chore, so the lifetime count stays put"
+    )
+    assert coordinator.storage.get_points_transactions() == [], (
+        "nothing moved, so there is nothing to account for in the ledger"
     )
 
 
@@ -417,10 +418,10 @@ async def test_remove_points_handler_forwards_child_points_and_reason(
     )
 
 
-async def test_reason_is_accepted_but_never_persisted(
+async def test_reason_travels_from_the_service_call_into_the_ledger(
     hass: HomeAssistant, household: dict[str, Any]
 ) -> None:
-    """`reason` reaches the coordinator and is then discarded."""
+    """`reason` reaches the coordinator and is recorded against the adjustment."""
     coordinator: ChoremanderCoordinator = household["coordinator"]
     child: Child = household["child"]
 
@@ -432,7 +433,11 @@ async def test_reason_is_accepted_but_never_persisted(
     )
 
     assert coordinator.get_child(child.id).points == 4
-    assert "Helped a sibling" not in str(coordinator.storage._data), (
-        "the reason argument is documented but nothing stores it; if this "
-        "starts failing an audit trail was added and should be tested properly"
-    )
+
+    ledger = coordinator.storage.get_points_transactions()
+    assert len(ledger) == 1, "one adjustment, one ledger entry"
+    entry = ledger[0]
+    assert entry.event_type == "points_added"
+    assert entry.points == 4
+    assert entry.reason == "Helped a sibling"
+    assert entry.child_id == child.id

@@ -506,10 +506,10 @@ async def test_set_chore_order_replaces_rather_than_merges(
 # --------------------------------------------------------------------------
 
 
-async def test_update_data_returns_nine_keys_of_model_objects(
+async def test_update_data_returns_eleven_keys_of_model_objects(
     coordinator: ChoremanderCoordinator,
 ) -> None:
-    """A refresh publishes the full nine-key snapshot as parsed model objects."""
+    """A refresh publishes the full eleven-key snapshot as parsed model objects."""
     child = await coordinator.async_add_child("Krishna")
     chore = await coordinator.async_add_chore("Dishes", points=3, requires_approval=True)
     reward = await coordinator.async_add_reward("Screen Time", cost=1, override_point_value=True)
@@ -526,8 +526,10 @@ async def test_update_data_returns_nine_keys_of_model_objects(
         "pending_completions",
         "reward_claims",
         "pending_reward_claims",
+        "points_transactions",
         "points_name",
         "points_icon",
+        "streaks",
     }, f"coordinator data keys drifted: {sorted(data)}"
 
     assert isinstance(data["children"][0], Child)

@@ -329,27 +329,27 @@ async def test_rejecting_a_claim_whose_reward_was_deleted_refunds_nothing(
 # ---------------------------------------------------------------------------
 
 
-async def test_adding_points_also_increments_the_lifetime_chore_count(
+async def test_a_manual_bonus_is_not_counted_as_a_chore(
     coordinator: ChoremanderCoordinator,
 ) -> None:
-    """CURRENT BEHAVIOUR (defect #4, see test plan §6.2) - a bonus fakes a chore.
+    """A points adjustment must not inflate the lifetime chore count.
 
-    `async_add_points` routes through `_award_points`, which unconditionally
-    does `total_chores_completed += 1`. Even a zero-point bonus inflates the
-    child's lifetime chore count. This test pins today's behaviour so a future
-    fix shows up as a deliberate change.
+    `async_add_points` routes through `_award_points`, which used to do
+    `total_chores_completed += 1` unconditionally - so handing out a bonus, or
+    even a zero-point adjustment, claimed a chore had been done. That number
+    now drives the streak card's achievements, so it has to mean what it says.
     """
     child = await coordinator.async_add_child("Radha")
     await _set_balance(coordinator, child.id, 15)
 
     await coordinator.async_add_points(child.id, 0, reason="just checking")
+    await coordinator.async_add_points(child.id, 7, reason="Helped a sibling")
 
     after = coordinator.get_child(child.id)
-    assert after.points == 15, "a zero-point bonus must not change the balance"
-    assert after.total_points_earned == 0, "nor lifetime earnings"
-    assert after.total_chores_completed == 1, (
-        "but the lifetime chore count is incremented anyway - a manual points "
-        "adjustment is recorded as though a chore had been done"
+    assert after.points == 22, "a zero-point bonus is a no-op; the 7 applies"
+    assert after.total_points_earned == 7, "only real points count as earned"
+    assert after.total_chores_completed == 0, (
+        "no chore was done, so the lifetime chore count must stay at zero"
     )
 
 
@@ -399,12 +399,13 @@ async def test_adding_and_removing_points_reject_an_unknown_child(
         await coordinator.async_remove_points("nope", 5)
 
 
-async def test_the_reason_for_a_points_adjustment_is_discarded(
+async def test_the_reason_for_a_points_adjustment_is_recorded_in_the_ledger(
     coordinator: ChoremanderCoordinator,
 ) -> None:
-    """`reason` is accepted by the API and by `services.yaml` but never stored.
+    """`reason` is accepted by the API and by `services.yaml`, and now stored.
 
-    There is no audit trail for manual points adjustments.
+    It used to be discarded, which left manual adjustments as unexplained
+    movements in a child's balance.
     """
     child = await coordinator.async_add_child("Krishna")
 
@@ -412,10 +413,14 @@ async def test_the_reason_for_a_points_adjustment_is_discarded(
     await coordinator.async_remove_points(child.id, 2, reason="Backchat")
 
     dumped = json.dumps(coordinator.storage._data)
-    assert "Helped a sibling" not in dumped, (
-        "the reason given for a bonus is thrown away, not persisted"
-    )
-    assert "Backchat" not in dumped, "the reason given for a penalty is thrown away, not persisted"
+    assert "Helped a sibling" in dumped, "the reason given for a bonus is persisted"
+    assert "Backchat" in dumped, "the reason given for a penalty is persisted"
     assert coordinator.get_child(child.id).points == 3, (
         "the adjustments themselves still applied (0 + 5 - 2)"
     )
+
+    ledger = coordinator.storage.get_points_transactions()
+    assert [(t.event_type, t.points, t.reason) for t in ledger] == [
+        ("points_added", 5, "Helped a sibling"),
+        ("points_removed", -2, "Backchat"),
+    ], "oldest first, with the sign of the movement and the reason kept apart"
