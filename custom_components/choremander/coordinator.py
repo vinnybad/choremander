@@ -24,6 +24,7 @@ from .const import (
 )
 from .models import Child, Chore, ChoreCompletion, PointsTransaction, Reward, RewardClaim
 from .schedule import (
+    ROTATION_NONE,
     ChoreSchedule,
     assignees_on,
     is_scheduled,
@@ -34,6 +35,36 @@ from .storage import ChoremanderStorage
 from .streaks import compute_streaks, recent_active_days
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _published_rule(chore: Chore) -> dict[str, Any]:
+    """Return a chore's scheduling rule as the card will hand it back.
+
+    Read off the ``Chore`` rather than off the household-substituted schedule,
+    so that what is published is what is *stored*. Standing the roster in for
+    an empty ``assigned_to`` is a resolution-time convenience; writing it back
+    would turn "anyone" into an explicit list of today's children and quietly
+    freeze the chore against the family ever changing.
+
+    Fields sitting at their default are left out entirely. The reader treats a
+    missing key as the default, which keeps a rule that only sets due days to
+    one key instead of six, and keeps this proportional to the scheduling a
+    family has set up rather than to the number of fields the model has.
+    """
+    rule: dict[str, Any] = {}
+    if chore.due_days:
+        rule["due_days"] = list(chore.due_days)
+    if chore.rotation and chore.rotation != ROTATION_NONE:
+        rule["rotation"] = chore.rotation
+    if chore.rotation_order:
+        rule["rotation_order"] = list(chore.rotation_order)
+    if chore.rotation_anchor:
+        rule["rotation_anchor"] = chore.rotation_anchor
+    if chore.day_overrides:
+        rule["day_overrides"] = dict(chore.day_overrides)
+    if chore.date_overrides:
+        rule["date_overrides"] = dict(chore.date_overrides)
+    return rule
 
 # How far ahead pricing looks to work out how often a chore actually falls to a
 # child. Four whole weeks, so a week rotation between two children comes out at
@@ -166,6 +197,19 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         missing chore exactly as it reads a missing sensor, which is how it
         behaved before schedules existed. A chore nobody is on for a given day
         is omitted from that day rather than carried as an empty list.
+
+        ``rules`` runs parallel to ``chores`` and carries each one's rule
+        verbatim - the stored strings and ids, not indices. The resolved days
+        say *what is true*; a card that has to *edit* a rule needs to know what
+        the rule says, and inferring it back out of fourteen resolved days
+        cannot be done: a Saturday that resolves to somebody might be a due day
+        or a one-off override, and guessing wrong turns "Maya covers this
+        Saturday" into "this chore is now due every Saturday" the next time the
+        parent touches it. Values round-trip exactly because they are what the
+        service will be handed back; indexing them would silently drop a child
+        who has left the household, and re-sending that would delete them from
+        the rule. Fields at their default are omitted, which keeps this
+        proportional to the scheduling a family has actually set up.
         """
         start = week_start(today or dt_util.now().date())
         household = self._household_ids()
@@ -196,6 +240,7 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
             "window_days": SCHEDULE_WINDOW_DAYS,
             "children": household,
             "chores": [chore.id for chore, _schedule in scheduled],
+            "rules": [_published_rule(chore) for chore, _schedule in scheduled],
             "days": days,
         }
 
@@ -292,10 +337,17 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
                 for child_id in assignees_on(schedule, day):
                     scheduled.setdefault(child_id, set()).add(day)
 
-        return {
-            child.id: {day for day in window if day not in scheduled.get(child.id, set())}
-            for child in children
-        }
+        rest: dict[str, set[date]] = {}
+        for child in children:
+            on = scheduled.get(child.id, set())
+            # A child who is on nothing anywhere in the window is not resting,
+            # they simply have no chores - a brand-new household, or a sibling
+            # every chore is assigned away from. Calling those thirty days off
+            # would fill the streak strip with "day off" dots for a family that
+            # has never opened the scheduling feature, when what the strip
+            # should say is that nothing has happened yet.
+            rest[child.id] = {day for day in window if day not in on} if on else set()
+        return rest
 
     def _apply_streak(
         self, child: Child, streaks: dict[str, dict[str, Any]] | None = None

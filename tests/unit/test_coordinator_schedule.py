@@ -354,6 +354,112 @@ def test_the_window_is_resolved_from_the_rules_and_not_from_stored_state(
 
 
 # ---------------------------------------------------------------------------
+# The rules, published so the card can edit them
+# ---------------------------------------------------------------------------
+#
+# The resolved days say what is true. A card that edits a rule needs to know
+# what the rule *says*, and that cannot be inferred back out of the days: a
+# Saturday somebody is on might be a due day or a one-off swap, and guessing
+# turns "Maya covers this Saturday" into "due every Saturday" the next time the
+# parent saves.
+
+
+def test_the_rules_run_parallel_to_the_chores(make_schedule_coordinator) -> None:
+    """Index N of `rules` is the rule for index N of `chores`."""
+    coordinator = make_schedule_coordinator(
+        children=[child(KRISHNA)],
+        chores=[
+            chore("chore_unscheduled", assigned_to=[KRISHNA]),
+            chore("chore_bins", assigned_to=[KRISHNA], due_days=["monday"]),
+            chore("chore_dishes", assigned_to=[KRISHNA], due_days=["friday"]),
+        ],
+    )
+
+    window = coordinator.schedule_window(MONDAY)
+
+    assert window["chores"] == ["chore_bins", "chore_dishes"]
+    assert window["rules"] == [{"due_days": ["monday"]}, {"due_days": ["friday"]}], (
+        "the unscheduled chore is in neither list, and the two lists must stay "
+        "index-for-index or the card edits the wrong chore's rule"
+    )
+
+
+def test_a_rule_carries_its_values_verbatim_for_round_tripping(
+    make_schedule_coordinator,
+) -> None:
+    """What is published is exactly what the service will be handed back.
+
+    Indexing the child ids would silently drop a child who has left the
+    household, and re-sending that pruned rule would delete them from it.
+    """
+    coordinator = make_schedule_coordinator(
+        children=[child(KRISHNA)],
+        chores=[
+            chore(
+                "chore_dishes",
+                assigned_to=[KRISHNA],
+                due_days=["saturday", "sunday"],
+                rotation="occurrence",
+                rotation_order=[KRISHNA, "child_departed"],
+                rotation_anchor="2026-08-08",
+                day_overrides={"sunday": ["child_departed"]},
+                date_overrides={"2026-08-08": []},
+            )
+        ],
+    )
+
+    assert coordinator.schedule_window(MONDAY)["rules"] == [
+        {
+            "due_days": ["saturday", "sunday"],
+            "rotation": "occurrence",
+            "rotation_order": [KRISHNA, "child_departed"],
+            "rotation_anchor": "2026-08-08",
+            "day_overrides": {"sunday": ["child_departed"]},
+            "date_overrides": {"2026-08-08": []},
+        }
+    ], "every stored value must survive the round trip, including ids off the roster"
+
+
+def test_a_rule_omits_the_fields_sitting_at_their_default(
+    make_schedule_coordinator,
+) -> None:
+    """A rule that only sets due days is one key, not six."""
+    coordinator = make_schedule_coordinator(
+        children=[child(KRISHNA)],
+        chores=[chore("chore_bins", assigned_to=[KRISHNA], due_days=["monday"])],
+    )
+
+    assert coordinator.schedule_window(MONDAY)["rules"] == [{"due_days": ["monday"]}], (
+        "rotation 'none', empty orders and empty override maps are what a "
+        "reader assumes when a key is absent, so spending bytes on them is waste"
+    )
+
+
+def test_an_unassigned_chores_rule_does_not_freeze_the_household_into_it(
+    make_schedule_coordinator,
+) -> None:
+    """Standing the roster in for "anyone" is a resolution-time convenience.
+
+    Publishing the substituted roster would mean the card writing the rule
+    back turns "anyone" into today's list of children, and the chore stops
+    following the family as it changes.
+    """
+    coordinator = make_schedule_coordinator(
+        children=[child(KRISHNA), child(MAYA)],
+        chores=[chore("chore_tidy", due_days=["monday"])],
+    )
+
+    window = coordinator.schedule_window(MONDAY)
+
+    assert window["rules"] == [{"due_days": ["monday"]}], (
+        "the rule must not have grown an assigned_to or a rotation_order it never had"
+    )
+    assert named(window, 0) == {"chore_tidy": [KRISHNA, MAYA]}, (
+        "while the resolved day still hands it to the whole household"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Rest days - what a schedule does to a streak
 # ---------------------------------------------------------------------------
 #
@@ -390,6 +496,32 @@ def test_an_unscheduled_household_has_no_rest_days_at_all(
     assert rest_days_for(coordinator, KRISHNA) == set()
     assert rest_days_for(coordinator, MAYA) == set(), (
         "Maya is on the unassigned chore, which falls every day, so she has no day off either"
+    )
+
+
+def test_a_child_with_no_chores_at_all_is_not_resting(
+    make_schedule_coordinator,
+) -> None:
+    """ "Nothing has happened yet" is not the same as "you had the day off".
+
+    A brand-new household has no chores, and a sibling can have every chore
+    assigned away from them. Calling those days off would fill the streak strip
+    with day-off dots for a family that has never opened this feature - the
+    exact opposite of the feature being invisible until it is used.
+    """
+    empty = make_schedule_coordinator(children=[child(KRISHNA)])
+    assert rest_days_for(empty, KRISHNA) == set(), "no chores exist, so nobody is resting"
+
+    others_only = make_schedule_coordinator(
+        children=[child(KRISHNA), child(MAYA)],
+        chores=[chore("chore_bins", assigned_to=[MAYA], due_days=["monday"])],
+    )
+    assert rest_days_for(others_only, KRISHNA) == set(), (
+        "Krishna is on nothing anywhere in the window - that is a child with no "
+        "chores, not a child with thirty days off"
+    )
+    assert rest_days_for(others_only, MAYA), (
+        "while Maya, who is on something, does get the days she is not on it"
     )
 
 
