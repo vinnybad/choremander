@@ -656,7 +656,7 @@ async def test_add_child_persists_every_one_of_the_ten_model_fields(
 async def test_add_chore_and_reward_persist_their_full_field_sets(
     hass: HomeAssistant, hass_storage: dict[str, Any]
 ) -> None:
-    """Chore rows have 11 keys, reward rows 9 - pinned so drift is visible."""
+    """Chore rows have 16 keys, reward rows 9 - pinned so drift is visible."""
     storage = ChoremanderStorage(hass, "fields2")
     await storage.async_load()
 
@@ -668,6 +668,11 @@ async def test_add_chore_and_reward_persist_their_full_field_sets(
         "points",
         "description",
         "due_days",
+        "rotation",
+        "rotation_order",
+        "rotation_anchor",
+        "day_overrides",
+        "date_overrides",
         "assigned_to",
         "requires_approval",
         "time_category",
@@ -690,6 +695,50 @@ async def test_add_chore_and_reward_persist_their_full_field_sets(
     assert "is_dynamic" not in storage.data["rewards"][0], (
         "the legacy is_dynamic flag is migration-input only and must never be written back out"
     )
+
+
+async def test_a_full_schedule_survives_a_save_and_a_fresh_load(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """The schedule columns are the only nested structures a chore stores.
+
+    Everything else on a chore is a scalar or a flat list, so this is the first
+    time storage has had to carry a dict of lists. A reload here goes through
+    the real HA store rather than `Chore.from_dict` alone, which is what proves
+    the values reach disk in a shape that comes back.
+    """
+    storage = ChoremanderStorage(hass, "schedule_round_trip")
+    await storage.async_load()
+
+    storage.add_chore(
+        Chore(
+            name="Dishes",
+            due_days=["saturday", "sunday"],
+            rotation="occurrence",
+            rotation_order=["child_krishna", "child_radha"],
+            rotation_anchor="2026-08-08",
+            day_overrides={"sunday": ["child_radha"], "monday": []},
+            date_overrides={"2026-08-15": [], "2026-08-16": ["child_krishna"]},
+            assigned_to=["child_krishna", "child_radha"],
+            id="ch1",
+        )
+    )
+    await storage.async_save()
+
+    reloaded = ChoremanderStorage(hass, "schedule_round_trip")
+    await reloaded.async_load()
+    chore = reloaded.get_chore("ch1")
+
+    assert chore is not None
+    assert chore.due_days == ["saturday", "sunday"]
+    assert chore.rotation == "occurrence"
+    assert chore.rotation_order == ["child_krishna", "child_radha"]
+    assert chore.rotation_anchor == "2026-08-08"
+    assert chore.day_overrides == {"sunday": ["child_radha"], "monday": []}, (
+        "an empty override list is a decision - 'nobody, this Monday' - and must not "
+        "be dropped as though it were an empty slot"
+    )
+    assert chore.date_overrides == {"2026-08-15": [], "2026-08-16": ["child_krishna"]}
 
 
 async def test_getters_return_fresh_objects_so_edits_need_an_explicit_update(
@@ -1012,6 +1061,11 @@ async def test_dev_seed_round_trips_losslessly_and_materialises_model_defaults(
     )
     assert bed.completion_sound == "coin"
     assert bed.description == "" and bed.due_days == []
+    assert bed.rotation == "none" and bed.rotation_order == [] and bed.rotation_anchor == "", (
+        "a seed chore predates scheduling and must load with no rotation, which is "
+        "what lets the schedule columns be additive with no storage version bump"
+    )
+    assert bed.day_overrides == {} and bed.date_overrides == {}
 
     game = storage.get_reward("reward_krishna_game")
     assert game is not None

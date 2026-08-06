@@ -105,7 +105,17 @@ class Chore:
     name: str
     points: int = 10
     description: str = ""
-    due_days: list[str] = field(default_factory=list)
+    # Scheduling. These six fields are read as a unit by schedule.py, which owns
+    # what they mean; they are kept flat rather than nested under a "schedule"
+    # key so that adding them needs no storage migration - an old row simply
+    # loads with every one of them defaulted, and the defaults reproduce the
+    # pre-scheduling behaviour exactly.
+    due_days: list[str] = field(default_factory=list)  # [] means every day
+    rotation: str = "none"  # none | occurrence | week - see schedule.ROTATION_*
+    rotation_order: list[str] = field(default_factory=list)  # [] falls back to assigned_to
+    rotation_anchor: str = ""  # ISO date the cycle counts from; "" means the epoch default
+    day_overrides: dict[str, list[str]] = field(default_factory=dict)  # weekday -> child IDs
+    date_overrides: dict[str, list[str]] = field(default_factory=dict)  # ISO date -> child IDs
     assigned_to: list[str] = field(default_factory=list)  # List of child IDs
     requires_approval: bool = True
     time_category: str = "anytime"  # morning, afternoon, evening, night, anytime
@@ -122,6 +132,11 @@ class Chore:
             points=data.get("points", 10),
             description=data.get("description", ""),
             due_days=data.get("due_days", []),
+            rotation=data.get("rotation", "none"),
+            rotation_order=data.get("rotation_order", []),
+            rotation_anchor=data.get("rotation_anchor", ""),
+            day_overrides=data.get("day_overrides", {}),
+            date_overrides=data.get("date_overrides", {}),
             assigned_to=data.get("assigned_to", []),
             requires_approval=data.get("requires_approval", True),
             time_category=data.get("time_category", "anytime"),
@@ -138,6 +153,11 @@ class Chore:
             "points": self.points,
             "description": self.description,
             "due_days": self.due_days,
+            "rotation": self.rotation,
+            "rotation_order": self.rotation_order,
+            "rotation_anchor": self.rotation_anchor,
+            "day_overrides": self.day_overrides,
+            "date_overrides": self.date_overrides,
             "assigned_to": self.assigned_to,
             "requires_approval": self.requires_approval,
             "time_category": self.time_category,

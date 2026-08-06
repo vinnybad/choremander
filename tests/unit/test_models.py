@@ -115,7 +115,7 @@ def test_reward_to_dict_never_emits_is_dynamic_and_round_trips_stably() -> None:
     ("model", "instance", "expected_key_count"),
     [
         (Child, Child(name="Krishna"), 10),
-        (Chore, Chore(name="Make Bed"), 11),
+        (Chore, Chore(name="Make Bed"), 16),
         (Reward, Reward(name="Screen Time"), 9),
         (
             ChoreCompletion,
@@ -242,6 +242,8 @@ def test_models_apply_no_validation_to_their_inputs() -> None:
             "time_category": "banana",
             "daily_limit": -3,
             "completion_sound": "not-a-sound",
+            "rotation": "banana",
+            "due_days": ["funday"],
         }
     )
     reward = Reward.from_dict({"name": "Free", "cost": -10, "days_to_goal": 0})
@@ -250,6 +252,11 @@ def test_models_apply_no_validation_to_their_inputs() -> None:
     assert chore.time_category == "banana", "an unknown time category is stored verbatim"
     assert chore.daily_limit == -3, "a negative daily limit is stored verbatim"
     assert chore.completion_sound == "not-a-sound", "an unknown sound is stored verbatim"
+    assert chore.rotation == "banana", (
+        "an unknown rotation cadence is stored verbatim - schedule.py is what decides "
+        "how to survive it, and it does so by falling back rather than by rejecting"
+    )
+    assert chore.due_days == ["funday"], "an unknown weekday is stored verbatim"
     assert reward.cost == -10, "a negative cost is stored verbatim"
     assert reward.days_to_goal == 0, "a zero days_to_goal is stored verbatim"
 
@@ -299,6 +306,62 @@ def test_chore_from_dict_fills_defaults_for_a_legacy_seed_row() -> None:
     assert chore.name == "Make Bed"
     assert chore.points == 2
     assert chore.id == "chore_bed"
+
+
+def test_a_chore_stored_before_scheduling_existed_loads_unscheduled() -> None:
+    """This is what buys the feature its lack of a storage version bump.
+
+    Every chore row on every existing install predates all five scheduling
+    columns. They default here rather than in a migration, and the defaults
+    have to spell "no schedule" exactly - an empty `due_days` meaning every day
+    and a rotation of "none" meaning everyone assigned - or upgrading would
+    quietly un-schedule the installed base.
+    """
+    chore = Chore.from_dict(
+        {"name": "Make Bed", "points": 2, "assigned_to": ["k1"], "id": "chore_bed"}
+    )
+
+    assert chore.due_days == []
+    assert chore.rotation == "none"
+    assert chore.rotation_order == []
+    assert chore.rotation_anchor == ""
+    assert chore.day_overrides == {}
+    assert chore.date_overrides == {}
+
+
+def test_the_schedule_fields_survive_a_save_and_reload_intact() -> None:
+    """Nested dicts included - they are the only non-flat values a chore stores."""
+    chore = Chore(
+        name="Dishes",
+        due_days=["saturday", "sunday"],
+        rotation="occurrence",
+        rotation_order=["k1", "m1"],
+        rotation_anchor="2026-08-08",
+        day_overrides={"sunday": ["m1"], "monday": []},
+        date_overrides={"2026-08-15": [], "2026-08-16": ["k1", "m1"]},
+        assigned_to=["k1", "m1"],
+        id="c1",
+    )
+
+    reloaded = Chore.from_dict(json.loads(json.dumps(chore.to_dict())))
+
+    assert reloaded == chore, (
+        "the round trip goes through JSON because that is what the HA store writes; "
+        "a dict value that survived to_dict but not serialisation would still be a loss"
+    )
+
+
+def test_default_schedule_dicts_are_not_shared_between_chores() -> None:
+    """`field(default_factory=dict)` - one family's override must not appear on
+    every other chore in the house."""
+    first = Chore(name="Dishes")
+    second = Chore(name="Trash")
+
+    first.day_overrides["saturday"] = ["k1"]
+    first.date_overrides["2026-08-08"] = ["k1"]
+
+    assert second.day_overrides == {}
+    assert second.date_overrides == {}
 
 
 def test_child_from_dict_zeroes_stats_absent_from_a_legacy_row() -> None:

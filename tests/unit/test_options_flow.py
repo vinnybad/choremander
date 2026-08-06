@@ -457,6 +457,11 @@ async def test_saving_an_edited_chore_writes_every_field_back_to_storage(
         "points": 4,
         "description": "Two minutes",
         "due_days": ["monday", "friday"],
+        "rotation": "none",
+        "rotation_order": [],
+        "rotation_anchor": "",
+        "day_overrides": {},
+        "date_overrides": {},
         "assigned_to": ["child_radha"],
         "requires_approval": True,
         "time_category": "night",
@@ -464,7 +469,11 @@ async def test_saving_an_edited_chore_writes_every_field_back_to_storage(
         "completion_sound": "fanfare",
         "completion_percentage_per_month": 50,
         "id": "chore_teeth_am",
-    }, "every field on the edit form must be persisted, and the id must not change"
+    }, (
+        "every field on the edit form must be persisted, and the id must not change. "
+        "The rotation and override columns have no form field on purpose - the schedule "
+        "card is their editing surface - so they appear here at their defaults"
+    )
     assert isinstance(stored["points"], int) and isinstance(stored["daily_limit"], int), (
         "NumberSelector returns floats; storing 4.0 instead of 4 would leak into "
         "every points calculation downstream"
@@ -498,6 +507,11 @@ async def test_saving_an_unchanged_seed_chore_materialises_the_fields_it_never_h
         "points": 2,
         "description": "",
         "due_days": [],
+        "rotation": "none",
+        "rotation_order": [],
+        "rotation_anchor": "",
+        "day_overrides": {},
+        "date_overrides": {},
         "assigned_to": [],
         "requires_approval": False,
         "time_category": "morning",
@@ -509,6 +523,40 @@ async def test_saving_an_unchanged_seed_chore_materialises_the_fields_it_never_h
         "a save with no user edits still rewrites the row through Chore.to_dict(), "
         "so the model defaults become persisted values"
     )
+
+
+async def test_saving_the_chore_form_leaves_a_schedule_set_on_the_card_alone(
+    hass: HomeAssistant, seeded_coordinator: ChoremanderCoordinator, seeded_entry: ConfigEntry
+) -> None:
+    """Editing points must not silently delete a rotation.
+
+    The rotation and override columns have no field on this form - the schedule
+    card owns them - and the save path assigns only the fields the form
+    submitted. If it ever rebuilt the chore from `user_input` instead, a parent
+    nudging a chore from 2 points to 3 would wipe a fortnight of scheduling with
+    nothing to warn them.
+    """
+    chore = seeded_coordinator.get_chore("chore_teeth_am")
+    chore.rotation = "week"
+    chore.rotation_order = ["child_krishna", "child_radha"]
+    chore.rotation_anchor = "2026-08-03"
+    chore.day_overrides = {"sunday": []}
+    chore.date_overrides = {"2026-08-08": ["child_radha"]}
+    await seeded_coordinator.async_update_chore(chore)
+
+    flow_id, _result = await _navigate(
+        hass, seeded_entry, "manage_chores", "edit_chore_chore_teeth_am"
+    )
+    await _submit(hass, flow_id, {"points": 3.0, "action": "save"})
+
+    saved = seeded_coordinator.get_chore("chore_teeth_am")
+    assert saved is not None
+    assert saved.points == 3, "precondition: the edit the parent actually made went through"
+    assert saved.rotation == "week"
+    assert saved.rotation_order == ["child_krishna", "child_radha"]
+    assert saved.rotation_anchor == "2026-08-03"
+    assert saved.day_overrides == {"sunday": []}
+    assert saved.date_overrides == {"2026-08-08": ["child_radha"]}
 
 
 async def test_delete_removes_the_child_chore_or_reward_from_its_menu(

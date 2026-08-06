@@ -159,7 +159,12 @@ async def test_removing_an_unknown_child_is_a_silent_noop(
 async def test_adding_a_chore_stores_every_model_field(
     coordinator: ChoremanderCoordinator,
 ) -> None:
-    """A chore round-trips through storage with all eleven serialised fields."""
+    """A chore round-trips through storage with all sixteen serialised fields.
+
+    `async_add_chore` takes no scheduling arguments - the schedule card is the
+    editing surface - so the five schedule columns must appear on the row at
+    their defaults, which is what makes the feature additive with no migration.
+    """
     chore = await coordinator.async_add_chore(
         name="Make Bed",
         points=2,
@@ -178,6 +183,11 @@ async def test_adding_a_chore_stores_every_model_field(
         "points": 2,
         "description": "Duvet straight",
         "due_days": ["monday"],
+        "rotation": "none",
+        "rotation_order": [],
+        "rotation_anchor": "",
+        "day_overrides": {},
+        "date_overrides": {},
         "assigned_to": ["child_krishna"],
         "requires_approval": False,
         "time_category": "morning",
@@ -185,7 +195,7 @@ async def test_adding_a_chore_stores_every_model_field(
         "completion_sound": "fanfare",
         "completion_percentage_per_month": 50,
         "id": chore.id,
-    }, "the stored chore row must carry exactly the eleven Chore.to_dict fields"
+    }, "the stored chore row must carry exactly the sixteen Chore.to_dict fields"
 
 
 async def test_adding_a_chore_defaults_to_ten_points_and_requires_approval(
