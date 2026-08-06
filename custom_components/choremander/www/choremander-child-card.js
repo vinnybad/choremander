@@ -1346,6 +1346,11 @@ class ChoremanderChildCard extends LitElement {
     }
     this.config = {
       time_category: "anytime",
+      // The companion sensor that says whose turn each chore is on each day.
+      // Defaulted rather than required, because every card written before
+      // schedules existed has to keep working without being edited, and an
+      // entity that is not there is read as "no schedule" all the way down.
+      schedule_entity: "sensor.choremander_schedule",
       debug: false,
       default_sound: "coin",  // Default sound to use if chore doesn't specify one
       undo_sound: "undo",     // Sound to play when undoing a completion
@@ -1430,6 +1435,7 @@ class ChoremanderChildCard extends LitElement {
       entity: "sensor.choremander_overview",
       child_id: "",
       time_category: "morning",
+      schedule_entity: "sensor.choremander_schedule",
     };
   }
 
@@ -1544,17 +1550,25 @@ class ChoremanderChildCard extends LitElement {
     };
     console.log('[Choremander DEBUG]', JSON.stringify(debugInfo, null, 2));
 
-    const childChores = this._filterAndSortChores(allChores, child);
+    const assignedChores = this._filterAndSortChores(allChores, child);
+
+    // The schedule can only ever take chores away, so a list that started with
+    // something and ended empty is a day off rather than a finished day. That
+    // difference is the only thing the two empty states below are told apart by.
+    const childChores = this._filterBySchedule(assignedChores, child);
+    const dayOff = assignedChores.length > 0 && childChores.length === 0;
 
     // Log the filtering result
     console.debug(
-      `[Choremander] After filtering: showing ${childChores.length} of ${allChores.length} chores for child "${child.name}" (${child.id})`
+      `[Choremander] After filtering: showing ${childChores.length} of ${allChores.length} chores for child "${child.name}" (${child.id})`,
+      `\n  Not scheduled today: ${assignedChores.length - childChores.length}`
     );
 
     // Store debug info for rendering
     this._debugInfo = {
       ...debugInfo,
-      filteredCount: childChores.length
+      filteredCount: childChores.length,
+      unscheduledCount: assignedChores.length - childChores.length,
     };
 
     const pointsIcon = entity.attributes.points_icon || "mdi:star";
@@ -1621,7 +1635,7 @@ class ChoremanderChildCard extends LitElement {
 
         <div class="chores-container">
           ${childChores.length === 0
-            ? this._renderEmptyState()
+            ? this._renderEmptyState(dayOff)
             : html`
                 <div class="section-title">
                   <ha-icon icon="${this._getTimeCategoryIcon(this.config.time_category)}"></ha-icon>
@@ -1643,6 +1657,7 @@ class ChoremanderChildCard extends LitElement {
             <div>Found child.name: "${this._debugInfo?.foundChildName}"</div>
             <div>Total chores: ${this._debugInfo?.totalChores}</div>
             <div>Filtered chores: ${this._debugInfo?.filteredCount}</div>
+            <div>Held back by the schedule: ${this._debugInfo?.unscheduledCount}</div>
             <div style="margin-top: 5px;"><strong>Sample chores assigned_to:</strong></div>
             ${(this._debugInfo?.sampleChores || []).map(c => html`
               <div>- ${c.name}: ${JSON.stringify(c.assigned_to)} (isArray: ${c.isArray})</div>
@@ -1733,6 +1748,113 @@ class ChoremanderChildCard extends LitElement {
     });
   }
 
+  /**
+   * Drop the chores today is not this child's turn on.
+   *
+   * The schedule sensor publishes only the chores that carry a rule, so a chore
+   * it has never heard of is on every day for whoever it is assigned to - which
+   * is every chore in every household that has not set a schedule up yet.
+   * Reading an unknown chore, an absent sensor and a date past the published
+   * fortnight the same way is what keeps all of this invisible to everyone who
+   * never opts in.
+   */
+  _filterBySchedule(chores, child) {
+    const today = this._scheduleForToday(child);
+    if (!today) {
+      return chores;
+    }
+
+    return chores.filter((chore) => {
+      const choreId = String(chore.id);
+      return !today.scheduled.has(choreId) || today.on.has(choreId);
+    });
+  }
+
+  /**
+   * Today's row of the schedule sensor, resolved for one child.
+   *
+   * Null is returned for every reason the sensor might be unable to answer -
+   * not configured, restarting, still loading, published without the attributes
+   * this reads, or asked about a date outside the fortnight it covers - and the
+   * caller reads null as "show everything". Guessing an empty day instead would
+   * hand a child a blank card the first time they opened one after an upgrade,
+   * which is the one outcome worth more than any amount of filtering.
+   */
+  _scheduleForToday(child) {
+    const entity = this.hass.states[this.config.schedule_entity];
+    if (!entity || entity.state === "unavailable" || entity.state === "unknown") {
+      return null;
+    }
+
+    const attributes = entity.attributes || {};
+    const { children, chores, days } = attributes;
+    if (!Array.isArray(children) || !Array.isArray(chores) || !Array.isArray(days)) {
+      return null;
+    }
+
+    // A child the sensor has not caught up with yet - one added since its last
+    // refresh - appears in no day's entry, so filtering on them would empty the
+    // card. A roster that is a moment behind is not a fortnight off.
+    const childIndex = children.map(String).indexOf(String(child.id));
+    if (childIndex === -1) {
+      return null;
+    }
+
+    const dayIndex = this._scheduleDayIndex(attributes.window_start, days.length);
+    const entry = dayIndex === -1 ? null : days[dayIndex];
+    if (!entry || typeof entry !== "object") {
+      return null;
+    }
+
+    // An entry with no keys is a real answer rather than a missing one: every
+    // scheduled chore is off today, and the child gets their day off.
+    const on = new Set();
+    for (const [choreIndex, childIndices] of Object.entries(entry)) {
+      const choreId = chores[Number(choreIndex)];
+      if (choreId === undefined || !Array.isArray(childIndices)) continue;
+      if (childIndices.some((index) => Number(index) === childIndex)) {
+        on.add(String(choreId));
+      }
+    }
+
+    return { scheduled: new Set(chores.map(String)), on };
+  }
+
+  /**
+   * How far today sits into the published window, or -1 if it falls outside it.
+   *
+   * Counted by walking calendar days rather than by dividing a difference of
+   * timestamps by the length of a day: on the two nights a year the clock
+   * moves, a day is not 24 hours long, and an index that came out one short
+   * would quietly show a child yesterday's chores.
+   */
+  _scheduleDayIndex(windowStart, dayCount) {
+    const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(windowStart || ""));
+    if (!parts) {
+      return -1;
+    }
+
+    // Midday so that nothing below can be nudged across a date boundary, and
+    // browser-local so that setDate() stays plain calendar arithmetic. Today is
+    // read in the Home Assistant timezone, which is the one the window was
+    // written in.
+    const cursor = new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]), 12);
+    const today = this._getDatePartsInTimezone(new Date());
+
+    for (let offset = 0; offset < dayCount; offset++) {
+      if (
+        cursor.getFullYear() === today.year &&
+        cursor.getMonth() + 1 === today.month &&
+        cursor.getDate() === today.day
+      ) {
+        return offset;
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return -1;
+  }
+
   _getTimeCategoryIcon(category) {
     const icons = {
       morning: "mdi:weather-sunset-up",
@@ -1811,7 +1933,24 @@ class ChoremanderChildCard extends LitElement {
     });
   }
 
-  _renderEmptyState() {
+  /**
+   * The two ways a chore list ends up empty, which do not feel alike.
+   *
+   * "I finished everything" is a reward and "I was never on today" is a rest,
+   * and congratulating a child for a day they did nothing on cheapens the days
+   * they did.
+   */
+  _renderEmptyState(dayOff = false) {
+    if (dayOff) {
+      return html`
+        <div class="empty-state">
+          <ha-icon icon="mdi:sleep"></ha-icon>
+          <div class="message">Day off 🎉</div>
+          <div class="submessage">Nothing scheduled today. Next chores tomorrow!</div>
+        </div>
+      `;
+    }
+
     return html`
       <div class="empty-state">
         <ha-icon icon="mdi:party-popper"></ha-icon>
