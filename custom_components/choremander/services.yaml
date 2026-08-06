@@ -116,3 +116,91 @@ remove_points:
       required: false
       selector:
         text:
+
+set_chore_order:
+  name: Set Chore Order
+  description: >-
+    Set the order a child's chores appear in on their card. The reorder card
+    calls this when a chore is dragged into a new position.
+  fields:
+    child_id:
+      name: Child ID
+      description: The ID of the child whose ordering is being set
+      required: true
+      selector:
+        text:
+    chore_order:
+      name: Chore Order
+      description: Chore IDs, in the order they should appear
+      required: true
+      selector:
+        object:
+
+set_chore_schedule:
+  name: Set Chore Schedule
+  description: >-
+    Set which days a chore falls on and whose turn it is. Every field is
+    optional and anything left out is kept as it is, so one call can change
+    the rotation without disturbing the due days. Pass an empty list or an
+    empty dictionary to clear a field.
+  fields:
+    chore_id:
+      name: Chore ID
+      description: The ID of the chore being scheduled
+      required: true
+      selector:
+        text:
+    due_days:
+      name: Due Days
+      description: >-
+        Lowercase weekday names the chore falls on, for example
+        ["monday", "friday"]. An empty list means every day.
+      required: false
+      selector:
+        object:
+    rotation:
+      name: Rotation
+      description: >-
+        "none" for no rotation, "occurrence" to take turns each time the chore
+        comes round, or "week" to give a whole week to one child at a time.
+      required: false
+      selector:
+        select:
+          options:
+            - none
+            - occurrence
+            - week
+    rotation_order:
+      name: Rotation Order
+      description: >-
+        Child IDs, in the order they take turns. Empty falls back to the
+        children the chore is assigned to.
+      required: false
+      selector:
+        object:
+    rotation_anchor:
+      name: Rotation Anchor
+      description: >-
+        ISO date the rotation counts from, for example "2026-08-03". Change it
+        to shift whose turn it is without reordering the children.
+      required: false
+      selector:
+        text:
+    day_overrides:
+      name: Day Overrides
+      description: >-
+        Permanent per-weekday exceptions, as weekday name to child IDs - for
+        example {"saturday": ["child_maya"]}. An empty list means nobody that
+        day.
+      required: false
+      selector:
+        object:
+    date_overrides:
+      name: Date Overrides
+      description: >-
+        One-off exceptions for a single date, as ISO date to child IDs - for
+        example {"2026-08-08": ["child_krishna"]}. These win over every other
+        rule, and entries more than 60 days old are dropped on save.
+      required: false
+      selector:
+        object:

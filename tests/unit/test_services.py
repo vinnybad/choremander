@@ -34,6 +34,7 @@ SERVICE_PAYLOADS: dict[str, dict[str, Any]] = {
     "add_points": {"child_id": "child_x", "points": 1},
     "remove_points": {"child_id": "child_x", "points": 1},
     "set_chore_order": {"child_id": "child_x", "chore_order": ["chore_x"]},
+    "set_chore_schedule": {"chore_id": "chore_x", "due_days": ["monday"]},
 }
 ALL_SERVICES = list(SERVICE_PAYLOADS)
 
@@ -57,7 +58,7 @@ async def household(
 # ---------------------------------------------------------------------------
 
 
-async def test_setup_registers_all_eight_services(
+async def test_setup_registers_all_nine_services(
     hass: HomeAssistant, bypass_frontend_registration: None, init_integration: Any
 ) -> None:
     """Setting up a single entry exposes the full Choremander service API."""
@@ -66,23 +67,28 @@ async def test_setup_registers_all_eight_services(
 
     registered = set(hass.services.async_services_for_domain(DOMAIN))
     assert registered == set(ALL_SERVICES), (
-        "the registered service set drifted from the expected 8; "
+        "the registered service set drifted from the expected 9; "
         f"unexpected extras: {sorted(registered - set(ALL_SERVICES))!r}"
     )
 
 
-def test_services_yaml_documents_seven_of_the_eight_registered_services() -> None:
-    """`set_chore_order` is callable but invisible in the Developer Tools UI."""
+def test_services_yaml_documents_every_registered_service() -> None:
+    """Nothing callable may be invisible in the Developer Tools UI.
+
+    This used to assert the opposite: `set_chore_order` was registered in code
+    and missing from services.yaml (defect #8, test plan 6.2), so the reorder
+    card's service had no name, description or field hints anywhere in the UI.
+    Documenting `set_chore_schedule` was the moment to close that too - a file
+    that is already known to be one entry short is a file the next omission
+    hides in.
+    """
     documented = set(yaml.safe_load(SERVICES_YAML.read_text()))
 
-    # CURRENT BEHAVIOUR (defect #8, see test plan 6.2) - the reorder card's
-    # service is registered in code but missing from services.yaml, so it has
-    # no name, description or field hints anywhere in the UI.
-    assert documented ^ set(ALL_SERVICES) == {"set_chore_order"}, (
-        "services.yaml and the registered services should differ by exactly "
-        f"set_chore_order; actual difference: {documented ^ set(ALL_SERVICES)!r}"
+    assert documented == set(ALL_SERVICES), (
+        "services.yaml and the registered services must match exactly. "
+        f"Registered but undocumented: {sorted(set(ALL_SERVICES) - documented)!r}; "
+        f"documented but not registered: {sorted(documented - set(ALL_SERVICES))!r}"
     )
-    assert len(documented) == 7, f"expected 7 documented services, got {len(documented)}"
 
 
 async def test_reset_daily_and_preview_sound_constants_are_never_registered(
@@ -213,6 +219,94 @@ async def test_set_chore_order_wraps_a_bare_string_into_a_list(
     assert coordinator.get_child(child.id).chore_order == [chore.id], (
         "a bare chore id string should have been stored as a one-element list"
     )
+
+
+async def test_set_chore_schedule_leaves_the_fields_it_was_not_given_alone(
+    hass: HomeAssistant, household: dict[str, Any]
+) -> None:
+    """A partial write must not reset the rest of the rule.
+
+    The schedule card edits one row of the grid at a time, so most calls name a
+    single field. If an absent field read as "clear it", moving one Saturday
+    would silently wipe a rotation the parent set up last week - and the card
+    would look like it had worked.
+    """
+    coordinator: ChoremanderCoordinator = household["coordinator"]
+    chore: Chore = household["chore"]
+
+    await hass.services.async_call(
+        DOMAIN,
+        "set_chore_schedule",
+        {
+            "chore_id": chore.id,
+            "due_days": ["saturday", "sunday"],
+            "rotation": "occurrence",
+            "rotation_order": ["child_a", "child_b"],
+        },
+        blocking=True,
+    )
+    await hass.services.async_call(
+        DOMAIN,
+        "set_chore_schedule",
+        {"chore_id": chore.id, "due_days": ["monday"]},
+        blocking=True,
+    )
+
+    stored = coordinator.get_chore(chore.id)
+    assert stored.due_days == ["monday"], "the field that was named must change"
+    assert stored.rotation == "occurrence", (
+        "and the rotation, which the second call never mentioned, must survive it"
+    )
+    assert stored.rotation_order == ["child_a", "child_b"]
+
+
+async def test_set_chore_schedule_clears_a_field_when_asked_explicitly(
+    hass: HomeAssistant, household: dict[str, Any]
+) -> None:
+    """An empty list is the difference between "leave it" and "remove it"."""
+    coordinator: ChoremanderCoordinator = household["coordinator"]
+    chore: Chore = household["chore"]
+
+    await hass.services.async_call(
+        DOMAIN,
+        "set_chore_schedule",
+        {"chore_id": chore.id, "due_days": ["monday"], "day_overrides": {"sunday": []}},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        DOMAIN,
+        "set_chore_schedule",
+        {"chore_id": chore.id, "due_days": [], "day_overrides": {}},
+        blocking=True,
+    )
+
+    stored = coordinator.get_chore(chore.id)
+    assert stored.due_days == [], "an explicitly empty list means every day again"
+    assert stored.day_overrides == {}, "and an empty dict really does drop the overrides"
+
+
+async def test_set_chore_schedule_stores_values_it_cannot_make_sense_of(
+    hass: HomeAssistant, household: dict[str, Any]
+) -> None:
+    """No second rulebook in front of the one that decides who does the dishes.
+
+    `schedule.py` already degrades on a weekday that is not a weekday and a
+    rotation mode that does not exist. Rejecting them here would mean two
+    places deciding what a valid schedule is, and they would drift.
+    """
+    coordinator: ChoremanderCoordinator = household["coordinator"]
+    chore: Chore = household["chore"]
+
+    await hass.services.async_call(
+        DOMAIN,
+        "set_chore_schedule",
+        {"chore_id": chore.id, "due_days": ["funday"], "rotation": "ocurrence"},
+        blocking=True,
+    )
+
+    stored = coordinator.get_chore(chore.id)
+    assert stored.due_days == ["funday"]
+    assert stored.rotation == "ocurrence"
 
 
 def test_cv_string_coerces_ints_but_rejects_none() -> None:

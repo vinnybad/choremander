@@ -16,6 +16,12 @@ from .const import (
     ATTR_CHILD_ID,
     ATTR_CHORE_ID,
     ATTR_CHORE_ORDER,
+    ATTR_DATE_OVERRIDES,
+    ATTR_DAY_OVERRIDES,
+    ATTR_DUE_DAYS,
+    ATTR_ROTATION,
+    ATTR_ROTATION_ANCHOR,
+    ATTR_ROTATION_ORDER,
     ATTR_POINTS,
     ATTR_REASON,
     ATTR_REWARD_ID,
@@ -28,6 +34,7 @@ from .const import (
     SERVICE_REJECT_CHORE,
     SERVICE_REMOVE_POINTS,
     SERVICE_SET_CHORE_ORDER,
+    SERVICE_SET_CHORE_SCHEDULE,
 )
 from .coordinator import ChoremanderCoordinator
 from .frontend import async_register_cards, async_register_frontend
@@ -238,6 +245,34 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         chore_order = call.data[ATTR_CHORE_ORDER]
         await coordinator.async_set_chore_order(child_id, chore_order)
 
+    async def handle_set_chore_schedule(call: ServiceCall) -> None:
+        """Handle the set_chore_schedule service call.
+
+        Only the fields actually present in the call are forwarded. A schedule
+        is edited one part at a time - the card writes back a single row of the
+        grid - so a call that moves Saturday must leave a rotation set last week
+        alone. Passing `None` for an absent field would be indistinguishable
+        from being asked to clear it, which is why this reads `in call.data`
+        instead of using defaults.
+        """
+        coordinator = _get_coordinator(hass)
+        if not coordinator:
+            _LOGGER.error("No Choremander coordinator available")
+            return
+        fields = {
+            name: call.data[name]
+            for name in (
+                ATTR_DUE_DAYS,
+                ATTR_ROTATION,
+                ATTR_ROTATION_ORDER,
+                ATTR_ROTATION_ANCHOR,
+                ATTR_DAY_OVERRIDES,
+                ATTR_DATE_OVERRIDES,
+            )
+            if name in call.data
+        }
+        await coordinator.async_set_chore_schedule(call.data[ATTR_CHORE_ID], **fields)
+
     # Register all services
     hass.services.async_register(
         DOMAIN,
@@ -334,6 +369,31 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         ),
     )
 
+    # Every schedule field is optional, and none carries a default: the
+    # coordinator distinguishes "not mentioned" from "cleared", and a default
+    # would collapse the two. Nothing validates the *values* either - an
+    # unknown rotation mode or a weekday that is not a weekday is stored as
+    # sent, because schedule.py already degrades gracefully on all of them and
+    # a second set of rules here would be one more thing to keep in step.
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_CHORE_SCHEDULE,
+        handle_set_chore_schedule,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_CHORE_ID): cv.string,
+                vol.Optional(ATTR_DUE_DAYS): vol.All(cv.ensure_list, [cv.string]),
+                vol.Optional(ATTR_ROTATION): cv.string,
+                vol.Optional(ATTR_ROTATION_ORDER): vol.All(cv.ensure_list, [cv.string]),
+                vol.Optional(ATTR_ROTATION_ANCHOR): cv.string,
+                vol.Optional(ATTR_DAY_OVERRIDES): {cv.string: vol.All(cv.ensure_list, [cv.string])},
+                vol.Optional(ATTR_DATE_OVERRIDES): {
+                    cv.string: vol.All(cv.ensure_list, [cv.string])
+                },
+            }
+        ),
+    )
+
 
 def _async_unregister_services(hass: HomeAssistant) -> None:
     """Unregister Choremander services."""
@@ -346,6 +406,7 @@ def _async_unregister_services(hass: HomeAssistant) -> None:
         SERVICE_ADD_POINTS,
         SERVICE_REMOVE_POINTS,
         SERVICE_SET_CHORE_ORDER,
+    SERVICE_SET_CHORE_SCHEDULE,
     ]
     for service in services:
         hass.services.async_remove(DOMAIN, service)

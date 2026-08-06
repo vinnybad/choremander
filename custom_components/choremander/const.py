@@ -173,6 +173,7 @@ SERVICE_ADD_POINTS: Final = "add_points"
 SERVICE_REMOVE_POINTS: Final = "remove_points"
 SERVICE_RESET_DAILY: Final = "reset_daily"
 SERVICE_SET_CHORE_ORDER: Final = "set_chore_order"
+SERVICE_SET_CHORE_SCHEDULE: Final = "set_chore_schedule"
 SERVICE_PREVIEW_SOUND: Final = "preview_sound"
 
 # Events
@@ -186,6 +187,17 @@ ATTR_POINTS: Final = "points"
 ATTR_REASON: Final = "reason"
 ATTR_CHORE_ORDER: Final = "chore_order"
 ATTR_SOUND: Final = "sound"
+
+# The scheduling fields, as `set_chore_schedule` names them. Each one is
+# optional in the schema and absent means "leave it alone", so these are read
+# with `in call.data` rather than `call.data.get(...)` - a default here would
+# make clearing a rule indistinguishable from not mentioning it.
+ATTR_DUE_DAYS: Final = "due_days"
+ATTR_ROTATION: Final = "rotation"
+ATTR_ROTATION_ORDER: Final = "rotation_order"
+ATTR_ROTATION_ANCHOR: Final = "rotation_anchor"
+ATTR_DAY_OVERRIDES: Final = "day_overrides"
+ATTR_DATE_OVERRIDES: Final = "date_overrides"
 
 # States
 STATE_PENDING: Final = "pending"
