@@ -609,6 +609,13 @@ class StreaksSensor(ChoremandorBaseSensor):
                     # which keeps this proportional to activity rather than to
                     # the length of the window.
                     "active_days": streaks.get(c.id, {}).get("active_days", []),
+                    # The days the child had nothing scheduled. They are the
+                    # gaps the card must NOT draw as misses: a day off did not
+                    # break the streak, and a strip that shows it as a broken
+                    # dot contradicts the number printed next to it. Empty for
+                    # every household that schedules nothing, which is why this
+                    # costs nothing until the feature is used.
+                    "rest_days": streaks.get(c.id, {}).get("rest_days", []),
                 }
                 for c in data.get("children", [])
             ],

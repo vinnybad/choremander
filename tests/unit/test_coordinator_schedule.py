@@ -19,14 +19,18 @@ entry, no `async_load` and no clock beyond the date passed in.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.choremander.const import SCHEDULE_WINDOW_DAYS
+from custom_components.choremander.const import ACTIVE_DAYS_WINDOW, SCHEDULE_WINDOW_DAYS
 from custom_components.choremander.coordinator import ChoremanderCoordinator
-from custom_components.choremander.models import Child, Chore
+from custom_components.choremander.models import Child, Chore, ChoreCompletion
+from custom_components.choremander.schedule import weekday_name
+from custom_components.choremander.sensor import StreaksSensor
 
 # 2026-08-03 is a real Monday, so the reference week below walks a real
 # calendar and the weekday names are not wishful.
@@ -47,13 +51,14 @@ def make_schedule_coordinator(hass: HomeAssistant):
     def _make(
         children: list[Child] | None = None,
         chores: list[Chore] | None = None,
+        completions: list[ChoreCompletion] | None = None,
     ) -> ChoremanderCoordinator:
         coordinator = ChoremanderCoordinator(hass, "schedule_entry")
         coordinator.storage._data = {
             "children": [c.to_dict() for c in children or []],
             "chores": [c.to_dict() for c in chores or []],
             "rewards": [],
-            "completions": [],
+            "completions": [c.to_dict() for c in completions or []],
             "reward_claims": [],
             "points_name": "Stars",
             "points_icon": "mdi:star",
@@ -346,3 +351,146 @@ def test_the_window_is_resolved_from_the_rules_and_not_from_stored_state(
     assert coordinator.schedule_window(MONDAY) == coordinator.schedule_window(MONDAY)
     far_future = coordinator.schedule_window(date(2031, 3, 3))
     assert far_future["days"][0], "a window years out must still resolve to somebody"
+
+
+# ---------------------------------------------------------------------------
+# Rest days - what a schedule does to a streak
+# ---------------------------------------------------------------------------
+#
+# `compute_streaks` treats a day the child had nothing scheduled as neutral,
+# and the set of those days is derived here. These tests cover the derivation
+# and the publishing; `test_streaks.py` covers what the neutrality then does to
+# a run. Unlike the window above, this reads the real clock - `_rest_days` is
+# anchored on today - so every expectation below is built from `today` rather
+# than from a literal date.
+
+
+def rest_days_for(coordinator: ChoremanderCoordinator, child_id: str) -> set[str]:
+    """The child's derived rest days, as the ISO strings the sensor publishes."""
+    summary = coordinator._build_streak_summary(
+        coordinator.storage.get_children(), coordinator.storage.get_completions()
+    )
+    return set(summary[child_id]["rest_days"])
+
+
+def test_an_unscheduled_household_has_no_rest_days_at_all(
+    make_schedule_coordinator,
+) -> None:
+    """The property that keeps every existing streak exactly as it was.
+
+    A chore with no rule falls every day, so nobody is ever off. If this were
+    not true, shipping the feature would hand a rest day to every child in
+    every install and quietly change streaks nobody asked to change.
+    """
+    coordinator = make_schedule_coordinator(
+        children=[child(KRISHNA), child(MAYA)],
+        chores=[chore("chore_bed", assigned_to=[KRISHNA]), chore("chore_dishes")],
+    )
+
+    assert rest_days_for(coordinator, KRISHNA) == set()
+    assert rest_days_for(coordinator, MAYA) == set(), (
+        "Maya is on the unassigned chore, which falls every day, so she has no day off either"
+    )
+
+
+def test_the_days_a_chore_does_not_fall_become_rest_days(
+    make_schedule_coordinator,
+) -> None:
+    """A chore due one day a week leaves the child off on the other six."""
+    today = dt_util.now().date()
+    coordinator = make_schedule_coordinator(
+        children=[child(KRISHNA)],
+        chores=[chore("chore_bins", assigned_to=[KRISHNA], due_days=[weekday_name(today)])],
+    )
+
+    rest = rest_days_for(coordinator, KRISHNA)
+    window = [today - timedelta(days=offset) for offset in range(ACTIVE_DAYS_WINDOW)]
+    expected = {day.isoformat() for day in window if day.weekday() != today.weekday()}
+
+    assert rest == expected, (
+        "every day of the 30-day window except the ones sharing today's weekday must be a rest day"
+    )
+    assert today.isoformat() not in rest, "the day the chore is actually due is not a day off"
+
+
+def test_a_day_off_the_child_worked_anyway_is_not_a_rest_day(
+    make_schedule_coordinator,
+) -> None:
+    """Doing a chore on your day off is doing a chore.
+
+    Leaving the day in both sets would publish it to the card as a muted "day
+    off" dot with a real completion sitting behind it, which reads as the app
+    having lost the work.
+    """
+    today = dt_util.now().date()
+    yesterday = today - timedelta(days=1)
+    coordinator = make_schedule_coordinator(
+        children=[child(KRISHNA)],
+        chores=[chore("chore_bins", assigned_to=[KRISHNA], due_days=[weekday_name(today)])],
+        completions=[
+            ChoreCompletion(
+                chore_id="chore_bins",
+                child_id=KRISHNA,
+                completed_at=dt_util.start_of_local_day(yesterday) + timedelta(hours=9),
+            )
+        ],
+    )
+
+    rest = rest_days_for(coordinator, KRISHNA)
+
+    assert yesterday.isoformat() not in rest, (
+        "yesterday was not a scheduled day, but the child worked it, so it is an "
+        "active day and not a rest day"
+    )
+    assert (today - timedelta(days=2)).isoformat() in rest, (
+        "the day before that had nothing scheduled and nothing done, and stays a rest day"
+    )
+
+
+async def test_the_streaks_sensor_publishes_rest_days_beside_active_days(
+    hass: HomeAssistant, make_schedule_coordinator
+) -> None:
+    """The card cannot draw a day off it is never told about.
+
+    Without this the strip renders a scheduled day off as a gap - visually
+    identical to a miss - directly beside a streak number that counted it as
+    neither. The two would contradict each other on screen.
+    """
+    today = dt_util.now().date()
+    coordinator = make_schedule_coordinator(
+        children=[child(KRISHNA)],
+        chores=[chore("chore_bins", assigned_to=[KRISHNA], due_days=[weekday_name(today)])],
+    )
+    await coordinator.async_refresh()
+
+    entry = MockConfigEntry(domain="choremander", entry_id="schedule_entry")
+    attributes = StreaksSensor(coordinator, entry).extra_state_attributes
+    row = attributes["children"][0]
+
+    assert "rest_days" in row, "the streak card reads attributes.children[].rest_days"
+    assert set(row["rest_days"]) == rest_days_for(coordinator, KRISHNA), (
+        "and it must publish the same set the streak numbers were derived from, "
+        "or the strip and the count disagree"
+    )
+    assert row["rest_days"] == sorted(row["rest_days"]), (
+        "published in date order, so the card can walk it without sorting"
+    )
+
+
+async def test_the_streaks_sensor_publishes_no_rest_days_for_an_unscheduled_household(
+    hass: HomeAssistant, make_schedule_coordinator
+) -> None:
+    """The key appears for everyone, empty until a family schedules something."""
+    coordinator = make_schedule_coordinator(
+        children=[child(KRISHNA)],
+        chores=[chore("chore_bed", assigned_to=[KRISHNA])],
+    )
+    await coordinator.async_refresh()
+
+    entry = MockConfigEntry(domain="choremander", entry_id="schedule_entry")
+    attributes = StreaksSensor(coordinator, entry).extra_state_attributes
+
+    assert attributes["children"][0]["rest_days"] == [], (
+        "an always-present key that is empty is what lets the card branch on it "
+        "without checking whether the integration is new enough to send it"
+    )
