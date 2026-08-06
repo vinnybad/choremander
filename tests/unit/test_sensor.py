@@ -186,9 +186,9 @@ async def test_overview_state_is_the_child_count_and_the_payload_keys_are_frozen
     """The overview sensor's state counts children and its key set is a contract."""
     state = hass.states.get(OVERVIEW)
     assert state is not None, f"{OVERVIEW} was never created by the sensor platform"
-    assert state.state == "2", (
-        "the overview state is the number of children; the seed has Krishna and Radha, "
-        f"so it must read '2' but read {state.state!r}"
+    assert state.state == "3", (
+        "the overview state is the number of children; the seed has Krishna, Radha "
+        f"and Meera, so it must read '3' but read {state.state!r}"
     )
 
     payload_keys = set(state.attributes) - {"friendly_name", "icon"}
@@ -206,11 +206,11 @@ async def test_overview_reports_seed_totals_and_one_row_per_child(
     """Top-level counters and the `children` rows the points card renders."""
     attrs = hass.states.get(OVERVIEW).attributes
 
-    assert attrs["total_children"] == 2
-    assert attrs["total_chores"] == 8
+    assert attrs["total_children"] == 3
+    assert attrs["total_chores"] == 11
     assert attrs["total_rewards"] == 5
-    assert attrs["total_points_available"] == 40, (
-        "total_points_available is the sum of current balances: Krishna 25 + Radha 15"
+    assert attrs["total_points_available"] == 48, (
+        "total_points_available is the sum of current balances: Krishna 25 + Radha 15 + Meera 8"
     )
     assert attrs["total_chores_completed"] == 0
     assert attrs["todays_completions"] == []
@@ -231,6 +231,13 @@ async def test_overview_reports_seed_totals_and_one_row_per_child(
             "id": "child_radha",
             "name": "Radha",
             "points": 15,
+            "pending_points": 0,
+            "chore_order": [],
+        },
+        {
+            "id": "child_meera",
+            "name": "Meera",
+            "points": 8,
             "pending_points": 0,
             "chore_order": [],
         },
@@ -260,10 +267,13 @@ async def test_overview_reward_rows_carry_eleven_keys_and_dynamic_per_child_cost
             f"reads; got {sorted(set(row) ^ REWARD_ROW_KEYS)} as the difference"
         )
 
-    # Non-jackpot, dynamic: 15.0/day x 7 days = 105 for Krishna, 13.0 x 7 = 91 for Radha.
+    # Non-jackpot, dynamic: (15+3/7)/day x 7 days = 108 for Krishna, 13.0 x 7 =
+    # 91 for Radha and (23/7) x 7 = 23 for Meera - each child's own chores, at
+    # the frequency they come round.
     assert rewards["reward_screen"]["calculated_costs"] == {
-        "child_krishna": 105,
+        "child_krishna": 108,
         "child_radha": 91,
+        "child_meera": 23,
     }, "screen time is priced per child from each child's own assigned chores"
     assert rewards["reward_screen"]["cost"] == 10, (
         "the static `cost` is still published untouched next to the dynamic price"
@@ -273,14 +283,17 @@ async def test_overview_reward_rows_carry_eleven_keys_and_dynamic_per_child_cost
     assert rewards["reward_krishna_game"]["calculated_costs"] == {"child_krishna": 50}
     assert rewards["reward_radha_book"]["calculated_costs"] == {"child_radha": 30}
 
-    # Jackpots pool every child's daily rate: (15.0 + 13.0) x 14 = 392, x 30 = 840.
+    # Jackpots pool every child's daily rate: (15+3/7 + 13.0 + 23/7) x 14 = 444,
+    # and x 30 = 951.
     assert rewards["reward_movie_night"]["calculated_costs"] == {
-        "child_krishna": 392,
-        "child_radha": 392,
+        "child_krishna": 444,
+        "child_radha": 444,
+        "child_meera": 444,
     }, "a jackpot charges every child the same pooled price"
     assert rewards["reward_zoo_trip"]["calculated_costs"] == {
-        "child_krishna": 840,
-        "child_radha": 840,
+        "child_krishna": 951,
+        "child_radha": 951,
+        "child_meera": 951,
     }
 
 
@@ -298,8 +311,9 @@ async def test_child_daily_points_is_populated_only_for_jackpot_rewards(
 
     for reward_id in ("reward_movie_night", "reward_zoo_trip"):
         assert rewards[reward_id]["child_daily_points"] == {
-            "child_krishna": 15.0,
+            "child_krishna": 15 + 3 / 7,
             "child_radha": 13.0,
+            "child_meera": 2 * (6 / 7) + 4 * (2 / 7) + 3 * (1 / 7),
         }, f"{reward_id} is a jackpot, so each child's unrounded daily rate is published"
 
 
@@ -308,7 +322,7 @@ async def test_overview_chore_rows_carry_eight_keys_with_defaults_materialised(
 ) -> None:
     """Legacy seed rows gain sound/percentage defaults on the way out."""
     chores = {c["id"]: c for c in hass.states.get(OVERVIEW).attributes["chores"]}
-    assert len(chores) == 8
+    assert len(chores) == 11
 
     for chore_id, row in chores.items():
         assert set(row) == CHORE_ROW_KEYS, (
@@ -322,7 +336,7 @@ async def test_overview_chore_rows_carry_eight_keys_with_defaults_materialised(
         "points": 2,
         "time_category": "morning",
         "daily_limit": 1,
-        "assigned_to": [],
+        "assigned_to": ["child_krishna", "child_radha"],
         "completion_sound": "coin",
         "completion_percentage_per_month": 100,
     }, (
@@ -342,7 +356,7 @@ async def test_pending_points_sum_the_chore_points_of_unapproved_completions(
     await setup_choremander(seed_data)
 
     attrs = hass.states.get(OVERVIEW).attributes
-    krishna, radha = attrs["children"]
+    krishna, radha, _meera = attrs["children"]
 
     assert krishna["pending_points"] == 5, (
         "Do Homework is worth 5 and is awaiting approval, so Krishna has 5 stars waiting; "
@@ -588,6 +602,36 @@ async def test_child_points_sensor_publishes_balance_and_lifetime_stats(
     assert state.attributes["best_streak"] == 0
 
 
+async def test_child_stats_lists_a_chore_assigned_to_nobody_for_everybody(
+    hass: HomeAssistant, setup_choremander, seed_data: dict[str, Any]
+) -> None:
+    """An empty `assigned_to` means *anyone* here too.
+
+    Every chore in the dev seed now names its children explicitly, so nothing
+    there exercises this branch - deleting the `or not c.assigned_to` clause
+    from `sensor.py` left the whole unit suite green, which is how this was
+    found. It is the same reading the scheduling feature rests on, and getting
+    it backwards would empty a shared chore out of every child's stats sensor.
+    """
+    seed_data["chores"].append(
+        {
+            "id": "chore_shared",
+            "name": "Everybody's Chore",
+            "points": 1,
+            "assigned_to": [],
+            "time_category": "anytime",
+        }
+    )
+    await setup_choremander(seed_data)
+
+    for entity_id, name in (("sensor.krishna_stats", "Krishna"), ("sensor.radha_stats", "Radha")):
+        ids = [c["id"] for c in hass.states.get(entity_id).attributes["assigned_chores"]]
+        assert "chore_shared" in ids, (
+            f"{name} is on nobody's list for the shared chore, which is exactly "
+            f"what makes it hers; got {ids}"
+        )
+
+
 async def test_child_stats_assigned_chores_match_the_button_platform_filter(
     hass: HomeAssistant, seeded_entry: ConfigEntry
 ) -> None:
@@ -606,7 +650,7 @@ async def test_child_stats_assigned_chores_match_the_button_platform_filter(
         "chore_practice_piano",
         "chore_teeth_pm",
         "chore_tidy_room",
-    ], "Radha gets the unassigned chores plus her own; Krishna-only chores are excluded"
+    ], "Radha gets every chore that names her; Krishna-only chores are excluded"
     for row in assigned:
         assert set(row) == {"id", "name", "points", "time_category"}, (
             "assigned_chores rows are deliberately narrower than the overview chore rows"
@@ -637,8 +681,8 @@ async def test_a_new_child_gains_exactly_two_sensors_and_gains_them_only_once(
 
     await sensor_platform.async_setup_entry(hass, seeded_entry, collect)
     assert len(batches) == 1, "setup adds every entity in a single call"
-    assert len(batches[0]) == 9, (
-        "the seed yields 1 overview + 2 children x 2 sensors + pending-approvals, "
+    assert len(batches[0]) == 11, (
+        "the seed yields 1 overview + 3 children x 2 sensors + pending-approvals, "
         "activity, streaks and schedule sensors"
     )
 
@@ -701,13 +745,15 @@ async def test_cost_calculation_failure_falls_back_to_the_static_reward_cost(
     assert rewards["reward_screen"]["calculated_costs"] == {
         "child_krishna": 10,
         "child_radha": 10,
+        "child_meera": 10,
     }, "an unassigned reward falls back to its static cost for every child"
     assert rewards["reward_krishna_game"]["calculated_costs"] == {"child_krishna": 50}, (
         "an assigned reward falls back to its static cost for its assigned children only"
     )
     assert rewards["reward_movie_night"]["child_daily_points"] == {
-        "child_krishna": 15.0,
+        "child_krishna": 15 + 3 / 7,
         "child_radha": 13.0,
+        "child_meera": 2 * (6 / 7) + 4 * (2 / 7) + 3 * (1 / 7),
     }, "the jackpot weighting is computed separately and survives a pricing failure"
 
 
@@ -729,8 +775,9 @@ async def test_a_jackpot_weighting_failure_leaves_child_daily_points_empty(
         "than dropping the reward or raising into the state machine"
     )
     assert rewards["reward_movie_night"]["calculated_costs"] == {
-        "child_krishna": 392,
-        "child_radha": 392,
+        "child_krishna": 444,
+        "child_radha": 444,
+        "child_meera": 444,
     }, "pricing is unaffected - the two calculations are independently guarded"
     assert rewards["reward_screen"]["child_daily_points"] == {}, (
         "a non-jackpot reward never asks for the weighting in the first place"
@@ -754,6 +801,7 @@ async def test_a_coordinator_without_a_pricing_method_uses_the_static_cost(
     assert rewards["reward_screen"]["calculated_costs"] == {
         "child_krishna": 10,
         "child_radha": 10,
+        "child_meera": 10,
     }, "with no pricing method at all every child is quoted the static cost"
     assert rewards["reward_krishna_game"]["calculated_costs"] == {"child_krishna": 50}, (
         "an assigned reward still quotes only its assigned children"
@@ -930,9 +978,9 @@ async def test_every_sensor_hangs_off_the_single_choremander_device(
         for entity in er.async_entries_for_config_entry(registry, ENTRY_ID)
         if entity.domain == "sensor"
     ]
-    assert len(sensor_entities) == 9, (
+    assert len(sensor_entities) == 11, (
         "the seed yields overview + pending approvals + activity + streaks + "
-        "schedule + 2 sensors for each of 2 children"
+        "schedule + 2 sensors for each of 3 children"
     )
     assert {entity.device_id for entity in sensor_entities} == {device.id}, (
         "every sensor must be attached to the one Choremander device"

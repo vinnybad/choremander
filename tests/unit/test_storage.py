@@ -1048,8 +1048,8 @@ async def test_dev_seed_round_trips_losslessly_and_materialises_model_defaults(
     children = storage.get_children()
     chores = storage.get_chores()
     rewards = storage.get_rewards()
-    assert [c.id for c in children] == ["child_krishna", "child_radha"]
-    assert len(chores) == 8, "the dev seed defines eight chores"
+    assert [c.id for c in children] == ["child_krishna", "child_radha", "child_meera"]
+    assert len(chores) == 11, "the dev seed defines eleven chores"
     assert len(rewards) == 5, "the dev seed defines five rewards"
 
     # Fields the seed omits are materialised from the dataclass defaults.

@@ -35,7 +35,7 @@ from custom_components.choremander.const import (
 from custom_components.choremander.coordinator import ChoremanderCoordinator
 
 # The dev seed is the closest thing this project has to a realistic data set:
-# 2 children, 8 chores, 5 rewards. It comes from `tests/unit/dev_seed.py`, not
+# 3 children, 11 chores, 5 rewards. It comes from `tests/unit/dev_seed.py`, not
 # from `dev/config/.storage/`, because the running dev container rewrites that
 # file underneath the suite. The shared `dev_seed` fixture in
 # tests/unit/conftest.py hands out a deep copy per test, because
@@ -166,6 +166,7 @@ async def test_manage_children_menu_lists_each_child_between_add_and_back(
         "add_child",
         "edit_child_child_krishna",
         "edit_child_child_radha",
+        "edit_child_child_meera",
         "init",
     ], "menu order drives the on-screen order: Add first, children, Back last"
     assert result["menu_options"]["edit_child_child_krishna"] == "Edit: Krishna"
@@ -256,13 +257,15 @@ async def test_reward_menu_labels_show_the_static_cost_not_the_dynamic_price(
 ) -> None:
     """The options menu advertises `reward.cost`, which nobody is ever charged.
 
-    30 Min Screen Time uses dynamic pricing, so the real price is 105 for
-    Krishna and 91 for Radha - but the management menu says "10 pts".
+    30 Min Screen Time uses dynamic pricing, so the real price is 108 for
+    Krishna, 91 for Radha and 23 for Meera - but the management menu says
+    "10 pts".
     """
     reward = seeded_coordinator.get_reward("reward_screen")
     assert seeded_coordinator.calculate_dynamic_reward_costs(reward) == {
-        "child_krishna": 105,
+        "child_krishna": 108,
         "child_radha": 91,
+        "child_meera": 23,
     }, "sanity check on the dev seed: this reward really is dynamically priced"
 
     _flow_id, result = await _navigate(hass, seeded_entry, "manage_rewards")
@@ -512,7 +515,7 @@ async def test_saving_an_unchanged_seed_chore_materialises_the_fields_it_never_h
         "rotation_anchor": "",
         "day_overrides": {},
         "date_overrides": {},
-        "assigned_to": [],
+        "assigned_to": ["child_krishna", "child_radha"],
         "requires_approval": False,
         "time_category": "morning",
         "daily_limit": 1,
@@ -562,15 +565,22 @@ async def test_saving_the_chore_form_leaves_a_schedule_set_on_the_card_alone(
 async def test_delete_removes_the_child_chore_or_reward_from_its_menu(
     hass: HomeAssistant, seeded_coordinator: ChoremanderCoordinator, seeded_entry: ConfigEntry
 ) -> None:
-    """`{"action": "delete"}` is enough - the other fields default in."""
+    """`{"action": "delete"}` is enough - the other fields default in.
+
+    Meera is the child deleted here because no chore this test goes on to edit
+    is assigned to her. Deleting a child does not scrub their id out of
+    `chore.assigned_to`, and the edit-chore form validates the stored value
+    against the children who still exist, so editing Make Bed after deleting
+    Krishna or Radha fails on a chore nobody touched.
+    """
     flow_id, _result = await _navigate(
-        hass, seeded_entry, "manage_children", "edit_child_child_radha"
+        hass, seeded_entry, "manage_children", "edit_child_child_meera"
     )
     result = await _submit(hass, flow_id, {"action": "delete"})
-    assert "edit_child_child_radha" not in result["menu_options"], (
+    assert "edit_child_child_meera" not in result["menu_options"], (
         "a deleted child disappears from the children menu immediately"
     )
-    assert seeded_coordinator.get_child("child_radha") is None
+    assert seeded_coordinator.get_child("child_meera") is None
 
     await _choose(hass, flow_id, "init")
     await _choose(hass, flow_id, "manage_chores")

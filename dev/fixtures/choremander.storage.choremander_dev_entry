@@ -15,6 +15,12 @@
         "name": "Radha",
         "points": 15,
         "avatar": "mdi:account-circle"
+      },
+      {
+        "id": "child_meera",
+        "name": "Meera",
+        "points": 8,
+        "avatar": "mdi:account-circle"
       }
     ],
     "chores": [
@@ -23,7 +29,10 @@
         "name": "Make Bed",
         "points": 2,
         "time_category": "morning",
-        "assigned_to": [],
+        "assigned_to": [
+          "child_krishna",
+          "child_radha"
+        ],
         "requires_approval": false,
         "daily_limit": 1
       },
@@ -32,7 +41,10 @@
         "name": "Brush Teeth (Morning)",
         "points": 1,
         "time_category": "morning",
-        "assigned_to": [],
+        "assigned_to": [
+          "child_krishna",
+          "child_radha"
+        ],
         "requires_approval": false,
         "daily_limit": 1
       },
@@ -85,7 +97,10 @@
         "name": "Brush Teeth (Evening)",
         "points": 1,
         "time_category": "evening",
-        "assigned_to": [],
+        "assigned_to": [
+          "child_krishna",
+          "child_radha"
+        ],
         "requires_approval": false,
         "daily_limit": 1
       },
@@ -94,7 +109,65 @@
         "name": "Tidy Room",
         "points": 3,
         "time_category": "evening",
-        "assigned_to": [],
+        "assigned_to": [
+          "child_krishna",
+          "child_radha"
+        ],
+        "requires_approval": true,
+        "daily_limit": 1
+      },
+      {
+        "id": "chore_fish",
+        "name": "Feed the Fish",
+        "points": 2,
+        "time_category": "morning",
+        "assigned_to": [
+          "child_meera"
+        ],
+        "due_days": [
+          "monday",
+          "tuesday",
+          "wednesday",
+          "thursday",
+          "friday",
+          "saturday"
+        ],
+        "requires_approval": false,
+        "daily_limit": 1
+      },
+      {
+        "id": "chore_bins",
+        "name": "Take Out the Bins",
+        "points": 4,
+        "time_category": "evening",
+        "assigned_to": [
+          "child_meera"
+        ],
+        "due_days": [
+          "monday",
+          "thursday"
+        ],
+        "requires_approval": false,
+        "daily_limit": 1
+      },
+      {
+        "id": "chore_dishes",
+        "name": "Wash the Dishes",
+        "points": 3,
+        "time_category": "evening",
+        "assigned_to": [
+          "child_krishna",
+          "child_meera"
+        ],
+        "due_days": [
+          "wednesday",
+          "saturday"
+        ],
+        "rotation": "occurrence",
+        "rotation_order": [
+          "child_krishna",
+          "child_meera"
+        ],
         "requires_approval": true,
         "daily_limit": 1
       }

@@ -39,6 +39,7 @@ test.beforeAll(reseed);
 
 const RADHA = "child_radha";
 const KRISHNA = "child_krishna";
+const MEERA = "child_meera";
 const PIANO = "chore_practice_piano";
 
 const VIEW = "/parent/streaks";
@@ -48,7 +49,7 @@ test.describe("streak card", () => {
     await openDashboard(page, VIEW);
     const card = StreakCard.byTitle(page, "Streaks");
 
-    await expect(card.children).toHaveCount(2);
+    await expect(card.children).toHaveCount(3);
     await expect(card.streakCount(RADHA)).toHaveText("0");
     await expect(card.bestStreak(RADHA)).toHaveText("0");
     await expect(card.streakCount(KRISHNA)).toHaveText("0");
@@ -64,6 +65,42 @@ test.describe("streak card", () => {
     // A day that has not happened yet is not the same as a day that was
     // missed - there is still time to fix today.
     await expect(card.todayIdleDot(RADHA)).toHaveCount(1);
+  });
+
+  test("a scheduled day off is drawn as a rest, not as a miss", async ({ page }) => {
+    // Feed the Fish is Meera's Monday to Saturday and her other two chores fall
+    // inside that, so Sunday is the one day nothing in the house is hers. A day
+    // she was never on and a day she skipped look identical in a completion
+    // history and feel nothing alike, which is the whole reason `rest_days`
+    // exists.
+    const attributes = await entityAttributes("sensor.choremander_streaks");
+    const restDays = (childId: string): string[] =>
+      attributes.children.find((child: { id: string }) => child.id === childId).rest_days;
+
+    expect(restDays(MEERA).length).toBeGreaterThan(0);
+    for (const day of restDays(MEERA)) {
+      // Sunday, every one of them. Built from the three numbers because
+      // `new Date("2026-08-09")` is UTC midnight, which is the Saturday
+      // everywhere west of Greenwich.
+      const [year, month, date] = day.split("-").map(Number);
+      expect(new Date(year, month - 1, date).getDay(), `${day} should be a Sunday`).toBe(0);
+    }
+
+    // The other two are on chores that carry no rule, and a chore with no rule
+    // is on every day - so neither of them ever has a day off to draw.
+    expect(restDays(KRISHNA)).toEqual([]);
+    expect(restDays(RADHA)).toEqual([]);
+
+    await openDashboard(page, VIEW);
+    const card = StreakCard.byTitle(page, "Streaks");
+
+    // Any fourteen consecutive days hold exactly two Sundays, whichever day
+    // this happens to run on - and a rest day that is today is still a rest.
+    await expect(card.dots(MEERA)).toHaveCount(14);
+    await expect(card.restDots(MEERA)).toHaveCount(2);
+    await expect(card.restDots(MEERA).first()).toHaveAttribute("title", /day off/);
+    await expect(card.restDots(KRISHNA)).toHaveCount(0);
+    await expect(card.restDots(RADHA)).toHaveCount(0);
   });
 
   test("doing one chore lights today and starts the streak", async ({ page }) => {
@@ -158,13 +195,15 @@ test.describe("streak card", () => {
     await expect(only.lockedBadges(RADHA)).toHaveCount(9);
   });
 
-  test("a card scoped to one child leaves the other out entirely", async ({ page }) => {
+  test("a card scoped to one child leaves the others out entirely", async ({ page }) => {
     await openDashboard(page, VIEW);
     const only = StreakCard.byTitle(page, "Radha Only");
 
+    await expect(only.children).toHaveCount(1);
     await expect(only.child(RADHA)).toHaveCount(1);
     await expect(only.child(KRISHNA)).toHaveCount(0);
-    await expect(only.avatar(RADHA)).toHaveCount(0, );
+    await expect(only.child(MEERA)).toHaveCount(0);
+    await expect(only.avatar(RADHA)).toHaveCount(0);
   });
 
   test("the strip length follows the config", async ({ page }) => {

@@ -65,9 +65,9 @@ def test_fixture_starts_from_a_clean_slate() -> None:
     )
 
     balances = {c["name"]: c["points"] for c in data["children"]}
-    assert balances == {"Krishna": 25, "Radha": 15}, (
+    assert balances == {"Krishna": 25, "Radha": 15, "Meera": 8}, (
         f"The fixture's starting balances are {balances}, not the documented "
-        "Krishna 25 / Radha 15. Tests across all three layers assert these."
+        "Krishna 25 / Radha 15 / Meera 8. Tests across all three layers assert these."
     )
 
 

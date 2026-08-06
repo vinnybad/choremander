@@ -95,6 +95,22 @@
           ]
         },
         {
+          "title": "Schedule",
+          "path": "schedule",
+          "cards": [
+            {
+              "type": "custom:choremander-schedule-card",
+              "entity": "sensor.choremander_schedule",
+              "title": "Weekly Schedule"
+            },
+            {
+              "type": "custom:choremander-schedule-card",
+              "entity": "sensor.choremander_overview",
+              "title": "Wrong Sensor"
+            }
+          ]
+        },
+        {
           "title": "Misconfigured",
           "path": "misconfigured",
           "cards": [
@@ -112,6 +128,11 @@
               "type": "custom:choremander-streak-card",
               "entity": "sensor.choremander_overview",
               "title": "Wrong Streaks"
+            },
+            {
+              "type": "custom:choremander-schedule-card",
+              "entity": "sensor.choremander_overview",
+              "title": "Wrong Schedule"
             },
             {
               "type": "custom:choremander-child-card",

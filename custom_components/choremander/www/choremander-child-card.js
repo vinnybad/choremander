@@ -1550,25 +1550,52 @@ class ChoremanderChildCard extends LitElement {
     };
     console.log('[Choremander DEBUG]', JSON.stringify(debugInfo, null, 2));
 
-    const assignedChores = this._filterAndSortChores(allChores, child);
+    // Read once and hand down: for a chore that carries a rule the schedule is
+    // the whole answer to "who is on this today", so it has to be in hand while
+    // the list is being built rather than applied to a finished one.
+    const today = this._scheduleForToday(child);
 
-    // The schedule can only ever take chores away, so a list that started with
-    // something and ended empty is a day off rather than a finished day. That
-    // difference is the only thing the two empty states below are told apart by.
-    const childChores = this._filterBySchedule(assignedChores, child);
-    const dayOff = assignedChores.length > 0 && childChores.length === 0;
+    const childChores = this._filterAndSortChores(allChores, child, today);
+
+    // A day off is a claim about the child's whole day, not about this card's
+    // slice of it. Asked of the filtered list, a morning card would announce a
+    // rest day over an evening card listing three chores due tonight.
+    const onSomethingToday = allChores.some((chore) =>
+      this._isChoreForChildToday(chore, child, today)
+    );
+    // Nothing today AND something to be off from: either chores that are theirs
+    // but not due, or a turn coming later in the window. A child who genuinely
+    // has no chores at all is not resting, they are done.
+    const dayOff =
+      !onSomethingToday &&
+      (allChores.some((chore) => this._isAssignedTo(chore, child)) ||
+        Boolean(today && today.nextDay));
+
+    // Chores that would be on this card today if the schedule were not holding
+    // them back - so they have to be this child's to begin with. Without that
+    // term a chore only a sibling is ever on counts here too, and both
+    // children's debug panels report the same number for a chore one of them
+    // has never had.
+    const heldBack = allChores.filter(
+      (chore) =>
+        this._matchesTimeCategory(chore) &&
+        this._isAssignedTo(chore, child) &&
+        today &&
+        today.scheduled.has(String(chore.id)) &&
+        !today.on.has(String(chore.id))
+    ).length;
 
     // Log the filtering result
     console.debug(
       `[Choremander] After filtering: showing ${childChores.length} of ${allChores.length} chores for child "${child.name}" (${child.id})`,
-      `\n  Not scheduled today: ${assignedChores.length - childChores.length}`
+      `\n  Not scheduled today: ${heldBack}`
     );
 
     // Store debug info for rendering
     this._debugInfo = {
       ...debugInfo,
       filteredCount: childChores.length,
-      unscheduledCount: assignedChores.length - childChores.length,
+      unscheduledCount: heldBack,
     };
 
     const pointsIcon = entity.attributes.points_icon || "mdi:star";
@@ -1635,7 +1662,7 @@ class ChoremanderChildCard extends LitElement {
 
         <div class="chores-container">
           ${childChores.length === 0
-            ? this._renderEmptyState(dayOff)
+            ? this._renderEmptyState(dayOff, today ? today.nextDay : null, onSomethingToday)
             : html`
                 <div class="section-title">
                   <ha-icon icon="${this._getTimeCategoryIcon(this.config.time_category)}"></ha-icon>
@@ -1668,7 +1695,7 @@ class ChoremanderChildCard extends LitElement {
     `;
   }
 
-  _filterAndSortChores(chores, child) {
+  _filterAndSortChores(chores, child, today = null) {
     const childId = String(child.id || "");
     const childName = child.name;
     const choreOrder = child.chore_order || [];
@@ -1681,39 +1708,20 @@ class ChoremanderChildCard extends LitElement {
 
     // First, filter chores for this child and time category
     const filteredChores = chores.filter(chore => {
-      // Check time category
-      const matchesTime =
-        this.config.time_category === "all" ||
-        chore.time_category === this.config.time_category ||
-        chore.time_category === "anytime";
-
-      // Check if chore is assigned to this child
-      // If assigned_to is empty or not set, show to ALL children
-      // If assigned_to has specific child IDs, only show to those children
-      // Ensure assigned_to is always an array
-      let assignedTo = chore.assigned_to;
-      if (!Array.isArray(assignedTo)) {
-        assignedTo = [];
-      }
-
-      // Convert all assigned_to values to strings for consistent comparison
-      const assignedToStrings = assignedTo.map(id => String(id));
-
-      // STRICT: Only check child ID, not name
-      // assigned_to should ONLY contain child IDs, never names
-      const isAssignedToAll = assignedToStrings.length === 0;
-      const isAssignedToChild = isAssignedToAll || assignedToStrings.includes(childId);
+      const matchesTime = this._matchesTimeCategory(chore);
+      const isOnToday = this._isChoreForChildToday(chore, child, today);
+      const isScheduled = Boolean(today && today.scheduled.has(String(chore.id)));
 
       // Debug logging for each chore with assignments (always log to help debug)
       console.debug(
         `[Choremander] Chore "${chore.name}": ` +
-        `assigned_to=${JSON.stringify(assignedTo)} (isArray: ${Array.isArray(chore.assigned_to)}), ` +
-        `childId="${childId}", isAssignedToAll=${isAssignedToAll}, ` +
-        `isAssignedToChild=${isAssignedToChild}, matchesTime=${matchesTime}, ` +
-        `SHOWING=${matchesTime && isAssignedToChild}`
+        `assigned_to=${JSON.stringify(chore.assigned_to)} (isArray: ${Array.isArray(chore.assigned_to)}), ` +
+        `childId="${childId}", scheduled=${isScheduled}, ` +
+        `isOnToday=${isOnToday}, matchesTime=${matchesTime}, ` +
+        `SHOWING=${matchesTime && isOnToday}`
       );
 
-      return matchesTime && isAssignedToChild;
+      return matchesTime && isOnToday;
     });
 
     // Debug: Log the filtered results
@@ -1748,26 +1756,47 @@ class ChoremanderChildCard extends LitElement {
     });
   }
 
-  /**
-   * Drop the chores today is not this child's turn on.
-   *
-   * The schedule sensor publishes only the chores that carry a rule, so a chore
-   * it has never heard of is on every day for whoever it is assigned to - which
-   * is every chore in every household that has not set a schedule up yet.
-   * Reading an unknown chore, an absent sensor and a date past the published
-   * fortnight the same way is what keeps all of this invisible to everyone who
-   * never opts in.
-   */
-  _filterBySchedule(chores, child) {
-    const today = this._scheduleForToday(child);
-    if (!today) {
-      return chores;
-    }
+  _matchesTimeCategory(chore) {
+    return (
+      this.config.time_category === "all" ||
+      chore.time_category === this.config.time_category ||
+      chore.time_category === "anytime"
+    );
+  }
 
-    return chores.filter((chore) => {
-      const choreId = String(chore.id);
-      return !today.scheduled.has(choreId) || today.on.has(choreId);
-    });
+  /**
+   * Whether this child is on this chore today.
+   *
+   * For a chore the schedule sensor carries, the schedule is the whole answer
+   * and `assigned_to` is not consulted at all: the backend has already folded
+   * it in, so intersecting the two here would hide "Maya covers Saturday" from
+   * Maya - who is not assigned - as well as from Krishna, who is not on it that
+   * day. The chore would vanish from the household on the one day it matters.
+   *
+   * The sensor publishes only the chores that carry a rule, so a chore it has
+   * never heard of is on every day for whoever it is assigned to - which is
+   * every chore in every household that has not set a schedule up yet. Reading
+   * an unknown chore, an absent sensor and a date past the published fortnight
+   * the same way is what keeps all of this invisible to everyone who never
+   * opts in.
+   */
+  _isChoreForChildToday(chore, child, today) {
+    const choreId = String(chore.id);
+    if (today && today.scheduled.has(choreId)) {
+      return today.on.has(choreId);
+    }
+    return this._isAssignedTo(chore, child);
+  }
+
+  /**
+   * Raw `assigned_to` membership, by id only - never by name, because a name
+   * is not stable and two children can share one. An empty or absent list is
+   * the whole household rather than nobody.
+   */
+  _isAssignedTo(chore, child) {
+    const assignedTo = Array.isArray(chore.assigned_to) ? chore.assigned_to : [];
+    const ids = assignedTo.map((id) => String(id));
+    return ids.length === 0 || ids.includes(String(child.id || ""));
   }
 
   /**
@@ -1817,7 +1846,49 @@ class ChoremanderChildCard extends LitElement {
       }
     }
 
-    return { scheduled: new Set(chores.map(String)), on };
+    return {
+      scheduled: new Set(chores.map(String)),
+      on,
+      nextDay: this._nextDayOn(days, dayIndex, childIndex, attributes.window_start),
+    };
+  }
+
+  /**
+   * What to call the next day left in the window this child is on something,
+   * or null when there is no such day.
+   *
+   * Null is a real answer and the caller has to be able to say nothing: the
+   * window ends, and a Mondays-only chore read on a Tuesday was being promised
+   * "next chores tomorrow" purely because tomorrow is the only day a card with
+   * no lookahead can name.
+   *
+   * At a week out the weekday name stops identifying a day - seven days from a
+   * Wednesday is a Wednesday, and "Next chores Wednesday!" read on a Wednesday
+   * names today - so from there on a turn is counted in days instead.
+   */
+  _nextDayOn(days, dayIndex, childIndex, windowStart) {
+    for (let offset = dayIndex + 1; offset < days.length; offset++) {
+      const entry = days[offset];
+      if (!entry || typeof entry !== "object") continue;
+
+      const onThatDay = Object.values(entry).some(
+        (childIndices) =>
+          Array.isArray(childIndices) &&
+          childIndices.some((index) => Number(index) === childIndex)
+      );
+      if (!onThatDay) continue;
+
+      const away = offset - dayIndex;
+      if (away === 1) return "tomorrow";
+      if (away >= 7) return `in ${away} days`;
+
+      const start = this._parseWindowStart(windowStart);
+      if (!start) return `in ${away} days`;
+      start.setDate(start.getDate() + offset);
+      return start.toLocaleDateString(undefined, { weekday: "long" });
+    }
+
+    return null;
   }
 
   /**
@@ -1829,16 +1900,11 @@ class ChoremanderChildCard extends LitElement {
    * would quietly show a child yesterday's chores.
    */
   _scheduleDayIndex(windowStart, dayCount) {
-    const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(windowStart || ""));
-    if (!parts) {
+    const cursor = this._parseWindowStart(windowStart);
+    if (!cursor) {
       return -1;
     }
 
-    // Midday so that nothing below can be nudged across a date boundary, and
-    // browser-local so that setDate() stays plain calendar arithmetic. Today is
-    // read in the Home Assistant timezone, which is the one the window was
-    // written in.
-    const cursor = new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]), 12);
     const today = this._getDatePartsInTimezone(new Date());
 
     for (let offset = 0; offset < dayCount; offset++) {
@@ -1853,6 +1919,23 @@ class ChoremanderChildCard extends LitElement {
     }
 
     return -1;
+  }
+
+  /**
+   * The first day of the published window as a local Date, or null if the
+   * sensor did not publish one this card can read.
+   *
+   * Midday so that nothing done to it afterwards can be nudged across a date
+   * boundary, and browser-local so that setDate() stays plain calendar
+   * arithmetic. Today is read in the Home Assistant timezone, which is the one
+   * the window was written in.
+   */
+  _parseWindowStart(windowStart) {
+    const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(windowStart || ""));
+    if (!parts) {
+      return null;
+    }
+    return new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]), 12);
   }
 
   _getTimeCategoryIcon(category) {
@@ -1934,19 +2017,40 @@ class ChoremanderChildCard extends LitElement {
   }
 
   /**
-   * The two ways a chore list ends up empty, which do not feel alike.
+   * The three ways a chore list ends up empty, which do not feel alike.
    *
    * "I finished everything" is a reward and "I was never on today" is a rest,
    * and congratulating a child for a day they did nothing on cheapens the days
-   * they did.
+   * they did. The third is this card's own doing: a child on a morning chore
+   * and nothing in the evening is not resting and has certainly not finished,
+   * and the evening card must not say either while the morning card beside it
+   * still lists an undone chore. `onToday` is asked of the child's whole day
+   * rather than of this slice of it, which is the only way one card can know
+   * that the answer lies on another.
    */
-  _renderEmptyState(dayOff = false) {
+  _renderEmptyState(dayOff = false, nextDay = null, onToday = false) {
     if (dayOff) {
+      // No day is named when none is known. A child who has been told "next
+      // chores tomorrow" on a Tuesday by a Mondays-only chore learns to read
+      // the whole card as decoration.
       return html`
         <div class="empty-state">
           <ha-icon icon="mdi:sleep"></ha-icon>
           <div class="message">Day off 🎉</div>
-          <div class="submessage">Nothing scheduled today. Next chores tomorrow!</div>
+          <div class="submessage">Nothing scheduled today.${nextDay ? ` Next chores ${nextDay}!` : ""}</div>
+        </div>
+      `;
+    }
+
+    if (onToday) {
+      return html`
+        <div class="empty-state">
+          <ha-icon icon="mdi:clock-outline"></ha-icon>
+          <div class="message">Nothing here</div>
+          <div class="submessage">
+            No ${String(this._getTimeCategoryLabel(this.config.time_category) || "").toLowerCase()}
+            chores today - you are on something at another time.
+          </div>
         </div>
       `;
     }

@@ -78,7 +78,8 @@
         },
         "data_description": {
           "daily_limit": "How many times per day this chore can be completed",
-          "completion_percentage_per_month": "Expected completion rate (100 = daily, 50 = every other day)"
+          "due_days": "The weekdays this chore falls on. Leave it empty and the chore falls every day",
+          "completion_percentage_per_month": "Of the days this chore is due, how often it actually gets done (100 = every time). Due Days already decides how often it comes round"
         }
       },
       "add_chores_bulk": {
@@ -96,7 +97,8 @@
         },
         "data_description": {
           "daily_limit": "How many times per day this chore can be completed",
-          "completion_percentage_per_month": "Expected completion rate (100 = daily, 50 = every other day)"
+          "due_days": "The weekdays this chore falls on. Leave it empty and the chore falls every day",
+          "completion_percentage_per_month": "Of the days this chore is due, how often it actually gets done (100 = every time). Due Days already decides how often it comes round"
         }
       },
       "edit_chore": {
@@ -116,7 +118,8 @@
         },
         "data_description": {
           "daily_limit": "How many times per day this chore can be completed",
-          "completion_percentage_per_month": "Expected completion rate (100 = daily, 50 = every other day)"
+          "due_days": "The weekdays this chore falls on. Leave it empty and the chore falls every day",
+          "completion_percentage_per_month": "Of the days this chore is due, how often it actually gets done (100 = every time). Due Days already decides how often it comes round"
         }
       },
       "manage_rewards": {

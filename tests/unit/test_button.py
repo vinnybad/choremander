@@ -44,18 +44,25 @@ SEED_ENTRY_ID = "seed_entry"
 # developer happens to have the container up. The two lifetime counters below
 # are the values the seed had when these expectations were derived.
 #
-# 2 children / 8 chores / 5 rewards. The pricing consequences of this exact data
-# are worked through in the test plan, section 4:
-#   Krishna 15.0 pts/day (bed 2 + teeth_am 1 + feed_dog 3 + homework 5 +
-#                         teeth_pm 1 + tidy_room 3)
-#   Radha   13.0 pts/day (bed 2 + teeth_am 1 + water_plants 2 + piano 4 +
-#                         teeth_pm 1 + tidy_room 3)
+# 3 children / 11 chores / 5 rewards. The pricing consequences of this exact
+# data are worked through in the test plan, section 4. Three chores carry a
+# schedule, all of them Meera's, and a chore is worth what it actually comes
+# round to: Feed the Fish falls on every day but Sunday, Take Out the Bins on
+# Mondays and Thursdays, and Wash the Dishes alternates between Krishna and
+# Meera across Wednesdays and Saturdays.
+#   Krishna 15+3/7 pts/day (bed 2 + teeth_am 1 + feed_dog 3 + homework 5 +
+#                           teeth_pm 1 + tidy_room 3, plus dishes 3 x 1/7)
+#   Radha   13.0 pts/day   (bed 2 + teeth_am 1 + water_plants 2 + piano 4 +
+#                           teeth_pm 1 + tidy_room 3, none of them scheduled)
+#   Meera   23/7 pts/day   (fish 2 x 6/7 + bins 4 x 2/7 + dishes 3 x 1/7)
 DEV_SEED: dict[str, Any] = deepcopy(_COMMITTED_SEED)
 DEV_SEED["children"][0].update({"total_points_earned": 64, "total_chores_completed": 5})
 DEV_SEED["children"][1].update({"total_points_earned": 13, "total_chores_completed": 3})
 
-# Krishna is assigned 6 of the 8 seeded chores; water_plants and practice_piano
-# belong to Radha, and vice versa for feed_dog and homework.
+# A button follows `assigned_to`, never the schedule: Meera's bins are hers on
+# every day of the week even though she only takes them out on Mondays and
+# Thursdays. Krishna and Meera share the dishes, water_plants and practice_piano
+# are Radha's, and feed_dog and homework are Krishna's.
 KRISHNA_CHORE_BUTTONS = {
     "button.krishna_complete_make_bed",
     "button.krishna_complete_brush_teeth_morning",
@@ -63,6 +70,7 @@ KRISHNA_CHORE_BUTTONS = {
     "button.krishna_complete_do_homework",
     "button.krishna_complete_brush_teeth_evening",
     "button.krishna_complete_tidy_room",
+    "button.krishna_complete_wash_the_dishes",
 }
 RADHA_CHORE_BUTTONS = {
     "button.radha_complete_make_bed",
@@ -71,6 +79,11 @@ RADHA_CHORE_BUTTONS = {
     "button.radha_complete_practice_piano",
     "button.radha_complete_brush_teeth_evening",
     "button.radha_complete_tidy_room",
+}
+MEERA_CHORE_BUTTONS = {
+    "button.meera_complete_feed_the_fish",
+    "button.meera_complete_take_out_the_bins",
+    "button.meera_complete_wash_the_dishes",
 }
 CLAIM_BUTTONS = {
     "button.krishna_claim_30_min_screen_time",
@@ -83,6 +96,11 @@ CLAIM_BUTTONS = {
     "button.radha_claim_new_book",
     "button.radha_claim_family_movie_night",
     "button.radha_claim_trip_to_the_zoo",
+    "button.meera_claim_30_min_screen_time",
+    "button.meera_claim_new_video_game",
+    "button.meera_claim_new_book",
+    "button.meera_claim_family_movie_night",
+    "button.meera_claim_trip_to_the_zoo",
 }
 
 
@@ -143,9 +161,9 @@ def _button_entity_ids(hass: HomeAssistant) -> set[str]:
 
 
 def test_frozen_seed_has_the_shape_every_assertion_below_assumes() -> None:
-    """Guard the constant: 2 children, 8 chores, 5 rewards and a clean history."""
-    assert len(DEV_SEED["children"]) == 2
-    assert len(DEV_SEED["chores"]) == 8
+    """Guard the constant: 3 children, 11 chores, 5 rewards and a clean history."""
+    assert len(DEV_SEED["children"]) == 3
+    assert len(DEV_SEED["chores"]) == 11
     assert len(DEV_SEED["rewards"]) == 5
     assert DEV_SEED["completions"] == [], (
         "the frozen seed starts with no completion history so daily-limit checks "
@@ -154,19 +172,20 @@ def test_frozen_seed_has_the_shape_every_assertion_below_assumes() -> None:
     assert DEV_SEED["reward_claims"] == []
 
 
-async def test_dev_seed_produces_twenty_two_buttons_filtered_by_chore_assignment(
+async def test_dev_seed_produces_thirty_one_buttons_filtered_by_chore_assignment(
     hass: HomeAssistant, seeded_entry: ConfigEntry
 ) -> None:
-    """Each child gets a button for their 6 chores plus all 5 rewards."""
+    """Each child gets a button per chore of theirs, plus all 5 rewards."""
     entity_ids = _button_entity_ids(hass)
 
-    expected = KRISHNA_CHORE_BUTTONS | RADHA_CHORE_BUTTONS | CLAIM_BUTTONS
+    expected = KRISHNA_CHORE_BUTTONS | RADHA_CHORE_BUTTONS | MEERA_CHORE_BUTTONS | CLAIM_BUTTONS
     assert entity_ids == expected, (
-        "the button inventory drifted from 6 chore + 5 reward buttons per child; "
-        f"unexpected={sorted(entity_ids - expected)} missing={sorted(expected - entity_ids)}"
+        "the button inventory drifted from 7 + 6 + 3 chore buttons and 5 reward "
+        f"buttons per child; unexpected={sorted(entity_ids - expected)} "
+        f"missing={sorted(expected - entity_ids)}"
     )
-    assert len(entity_ids) == 22, (
-        f"expected 22 buttons for 2 children on the dev seed, got {len(entity_ids)}"
+    assert len(entity_ids) == 31, (
+        f"expected 31 buttons for 3 children on the dev seed, got {len(entity_ids)}"
     )
 
 
@@ -266,8 +285,8 @@ async def test_coordinator_refresh_never_calls_add_entities_a_second_time(
     await button_module.async_setup_entry(hass, seeded_entry, add_entities)
 
     assert add_entities.call_count == 1, "setup must hand entities over exactly once"
-    assert len(add_entities.call_args[0][0]) == 22, (
-        f"setup should build 22 buttons for the dev seed, got {len(add_entities.call_args[0][0])}"
+    assert len(add_entities.call_args[0][0]) == 31, (
+        f"setup should build 31 buttons for the dev seed, got {len(add_entities.call_args[0][0])}"
     )
 
     await seeded_coordinator.async_add_chore(name="Rake Leaves", points=1)
@@ -392,7 +411,7 @@ async def test_pressing_a_chore_button_lets_non_valueerror_failures_propagate(
 async def test_claim_button_prices_the_reward_dynamically_per_child(
     seeded_coordinator: ChoremanderCoordinator, seeded_entry: ConfigEntry
 ) -> None:
-    """Krishna earns 15 pts/day; 30 Min Screen Time targets 7 days -> 105."""
+    """Krishna earns 15+3/7 pts/day; 30 Min Screen Time targets 7 days -> 108."""
     child = seeded_coordinator.get_child("child_krishna")
     reward = seeded_coordinator.get_reward("reward_screen")
     entity = ClaimRewardButton(seeded_coordinator, seeded_entry, child, reward)
@@ -402,15 +421,15 @@ async def test_claim_button_prices_the_reward_dynamically_per_child(
         "child_name": "Krishna",
         "reward_id": "reward_screen",
         "reward_name": "30 Min Screen Time",
-        "cost": 105,
+        "cost": 108,
         "override_cost": 10,
         "is_dynamic": True,
         "child_points": 25,
         "can_afford": False,
-        "points_needed": 80,
+        "points_needed": 83,
     }, (
-        "Krishna's screen-time price should be 15.0 pts/day x 7 days = 105, with the "
-        "static cost of 10 reported only as override_cost"
+        "Krishna's screen-time price should be (15+3/7) pts/day x 7 days = 108, "
+        "with the static cost of 10 reported only as override_cost"
     )
     assert entity.name == "Krishna: Claim 30 Min Screen Time"
 
@@ -455,13 +474,13 @@ async def test_claim_button_is_available_exactly_at_the_effective_cost(
     reward = seeded_coordinator.get_reward("reward_screen")
     entity = ClaimRewardButton(seeded_coordinator, seeded_entry, child, reward)
 
-    _set_points(seeded_coordinator, "child_krishna", 105)
-    assert entity.available is True, "105 points must afford a 105 point reward"
+    _set_points(seeded_coordinator, "child_krishna", 108)
+    assert entity.available is True, "108 points must afford a 108 point reward"
     assert entity.extra_state_attributes["points_needed"] == 0
     assert entity.extra_state_attributes["can_afford"] is True
 
-    _set_points(seeded_coordinator, "child_krishna", 104)
-    assert entity.available is False, "104 points must not afford a 105 point reward"
+    _set_points(seeded_coordinator, "child_krishna", 107)
+    assert entity.available is False, "107 points must not afford a 108 point reward"
     assert entity.extra_state_attributes["points_needed"] == 1
 
     _set_points(seeded_coordinator, "child_krishna", 200)
@@ -480,7 +499,7 @@ async def test_claim_button_stays_available_when_the_coordinator_update_failed(
     claim = ClaimRewardButton(seeded_coordinator, seeded_entry, child, reward)
     complete = CompleteChoreButton(seeded_coordinator, seeded_entry, child, chore)
 
-    _set_points(seeded_coordinator, "child_krishna", 105)
+    _set_points(seeded_coordinator, "child_krishna", 120)
     seeded_coordinator.last_update_success = False
 
     assert claim.available is True, (
@@ -554,8 +573,8 @@ async def test_pressing_an_unaffordable_claim_button_swallows_valueerror_and_log
             "an unaffordable claim should return None, not raise"
         )
 
-    assert "Failed to claim reward: Not enough points. Need 105, have 25" in caplog.text, (
-        "the swallowed error should name the dynamic price (105) and the balance (25)"
+    assert "Failed to claim reward: Not enough points. Need 108, have 25" in caplog.text, (
+        "the swallowed error should name the dynamic price (108) and the balance (25)"
     )
     assert seeded_coordinator.get_child("child_krishna").points == 25, (
         "a failed claim must not move any points"
@@ -659,4 +678,60 @@ async def test_pressing_a_chore_button_through_home_assistant_awards_points(
     assert seeded_coordinator.get_child("child_krishna").points == 27, (
         "Make Bed is worth 2 points and requires no approval, so pressing its "
         "button should credit Krishna immediately"
+    )
+
+
+async def test_a_chore_assigned_to_nobody_gets_a_button_for_every_child(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    bypass_frontend_registration: None,
+) -> None:
+    """An empty `assigned_to` means *anyone*, and always has.
+
+    Pinned directly rather than through the dev seed. Every chore in the seed
+    now names its children explicitly, so nothing there reaches this branch -
+    deleting the `not chore.assigned_to` test from `button.py` left the whole
+    unit suite passing, which is how this hole was found.
+
+    It is worth a test of its own precisely because the scheduling feature
+    rests on the same reading: absent means *everyone*, never *nobody*. Getting
+    it backwards here would silently delete a button from every child's
+    dashboard for every shared chore in every install.
+    """
+    hass_storage[f"choremander.storage.{SEED_ENTRY_ID}"] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": f"choremander.storage.{SEED_ENTRY_ID}",
+        "data": {
+            "children": [
+                {"id": "child_a", "name": "Ana", "points": 0},
+                {"id": "child_b", "name": "Bo", "points": 0},
+            ],
+            "chores": [
+                {"id": "chore_shared", "name": "Shared", "points": 1, "assigned_to": []},
+                {"id": "chore_solo", "name": "Solo", "points": 1, "assigned_to": ["child_a"]},
+            ],
+            "rewards": [],
+            "completions": [],
+            "reward_claims": [],
+        },
+    }
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Choremander",
+        data={"points_name": "Stars", "points_icon": "mdi:star"},
+        entry_id=SEED_ENTRY_ID,
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("button.ana_complete_shared") is not None
+    assert hass.states.get("button.bo_complete_shared") is not None, (
+        "Bo is on nobody's list for the shared chore, which is exactly what "
+        "makes it hers too - an empty assigned_to is the whole household"
+    )
+    assert hass.states.get("button.ana_complete_solo") is not None
+    assert hass.states.get("button.bo_complete_solo") is None, (
+        "while a chore that names Ana explicitly must not reach Bo"
     )

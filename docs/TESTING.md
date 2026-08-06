@@ -48,7 +48,15 @@ gitignored and regenerated on demand.
 
 ### Seeded fixture data
 
-2 children (Krishna 25, Radha 15), 8 chores, 5 rewards.
+3 children (Krishna 25, Radha 15, Meera 8), 11 chores, 5 rewards.
+
+Three of those chores carry a schedule rule - Feed the Fish (Mon-Sat), Take Out
+the Bins (Mon, Thu) and Wash the Dishes (Wed, Sat, Krishna and Meera taking
+turns). All three are Meera's or shared with her, and none is asserted on by
+`kid-dashboard`, `parent-dashboard` or `card-layout`, whose fixtures depend on
+their chores being visible every day. Meera is on nothing at all on Sundays,
+which is the only way to reach the child card's "Day off" state and the streak
+card's rest dot.
 
 Radha's dashboard carries three views that differ only in card configuration:
 `/radha` at the default density, `/radha/compact` as a card-for-card mirror of

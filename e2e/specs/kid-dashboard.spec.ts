@@ -4,6 +4,8 @@ import {
   COMPLETED,
   ChildCard,
   NOT_COMPLETED,
+  callService,
+  mountChildCard,
   openDashboard,
   recordServiceCalls,
   reseed,
@@ -26,6 +28,9 @@ test.beforeAll(reseed);
  *   Do Homework / Krishna         -> approval gate
  *   Water the Plants / Radha      -> undo
  *   Brush Teeth (Evening) / Radha -> completed vs outstanding styling
+ *
+ * The day-off test completes nothing; it takes Meera's three scheduled chores
+ * off today, which no other test in this file reads.
  */
 
 test.describe("kid dashboard", () => {
@@ -106,6 +111,43 @@ test.describe("kid dashboard", () => {
     await expect(evening.root.locator(COMPLETED)).toHaveCount(before + 1);
     await expect(evening.chore("Brush Teeth (Evening)")).toHaveClass(/completed/);
     await expect(evening.root.locator(NOT_COMPLETED)).not.toHaveCount(0);
+  });
+
+  test("a child the schedule has nothing on today is told it is a day off", async ({
+    page,
+  }) => {
+    // Meera has no dashboard of her own in the fixture, so the card is built on
+    // the page against the same hass a view would hand it. She is the only
+    // child in the house whose chores all carry a rule, which is what makes a
+    // day off reachable at all: a chore with no rule is on every day.
+    await openDashboard(page, "/krishna");
+
+    // The browser's clock is pinned to the container's timezone, which is the
+    // one the integration resolves a schedule in. Asking Node instead would ask
+    // the machine running the test what day it is.
+    const today = await page.evaluate(() => new Date().toLocaleDateString("en-CA"));
+
+    // Her real day off is Sunday. Taking today off for each of her three chores
+    // is what makes this test say the same thing on a Tuesday, and a date
+    // override leaves the weekly pattern behind it exactly as it was.
+    for (const choreId of ["chore_fish", "chore_bins", "chore_dishes"]) {
+      await callService("choremander", "set_chore_schedule", {
+        chore_id: choreId,
+        date_overrides: { [today]: [] },
+      });
+    }
+
+    const card = await mountChildCard(page, {
+      entity: "sensor.choremander_overview",
+      child_id: "child_meera",
+      time_category: "morning",
+    });
+
+    // Emphatically not "All Done!" - she finished nothing. Congratulating a
+    // child for a day they were never on cheapens the days they were.
+    await expect(card.emptyState).toContainText("Day off");
+    await expect(card.emptyState).toContainText("Nothing scheduled today");
+    await expect(card.choreNames).toHaveCount(0);
   });
 
   test("the dashboard renders without console errors", async ({ page }) => {

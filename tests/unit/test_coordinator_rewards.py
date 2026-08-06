@@ -1,9 +1,12 @@
 """Reward claiming, approval, rejection and the manual points services.
 
-The pricing figures asserted here (105, 91, 70, 165, ...) come from executing
+The pricing figures asserted here (108, 91, 73, 165, ...) come from executing
 the real dynamic-pricing algorithm against the development data set - see test
 plan §4. They are literals on purpose: any drift in the formula should break
-these tests loudly.
+these tests loudly. Three of the seed's chores now carry a schedule, so a chore
+that only comes round twice a week is priced at twice a week; the figures moved
+when that landed, and they should move again if the frequency ever stops
+counting.
 
 `DEV_SEED` below is built from the committed seed frozen in
 `tests/unit/dev_seed.py`, plus the lifetime counters and the one pending claim
@@ -55,10 +58,10 @@ DEV_SEED["reward_claims"] = [
 async def seeded_coordinator(
     hass: HomeAssistant, hass_storage: dict[str, Any]
 ) -> ChoremanderCoordinator:
-    """A coordinator over the 2-child / 8-chore / 5-reward development data set.
+    """A coordinator over the 3-child / 11-chore / 5-reward development data set.
 
-    Krishna earns 15.0 points/day, Radha 13.0 - test plan §4.1. `DEV_SEED` is
-    deep-copied because `to_dict()`/`from_dict()` alias lists, so a mutating
+    Krishna earns 15+3/7 points/day, Radha 13.0 and Meera 23/7 - test plan §4.1.
+    `DEV_SEED` is deep-copied because `to_dict()`/`from_dict()` alias lists, so a mutating
     test would otherwise contaminate the module-level constant.
     """
     hass_storage["choremander.storage.seed_entry"] = {
@@ -99,20 +102,21 @@ def _claim_ids(coordinator: ChoremanderCoordinator) -> list[str]:
 async def test_claiming_charges_the_dynamic_price_not_the_stored_cost(
     seeded_coordinator: ChoremanderCoordinator,
 ) -> None:
-    """30 Min Screen Time stores `cost: 10` but really costs Krishna 105."""
+    """30 Min Screen Time stores `cost: 10` but really costs Krishna 108."""
     await _set_balance(seeded_coordinator, "child_krishna", 200)
 
     reward = seeded_coordinator.get_reward("reward_screen")
     assert reward.cost == 10, "seed precondition: the stored manual cost is 10"
     assert seeded_coordinator.calculate_dynamic_reward_costs(reward) == {
-        "child_krishna": 105,
+        "child_krishna": 108,
         "child_radha": 91,
-    }, "15.0 and 13.0 points/day over a 7-day goal"
+        "child_meera": 23,
+    }, "15+3/7, 13.0 and 23/7 points/day over a 7-day goal"
 
     await seeded_coordinator.async_claim_reward("reward_screen", "child_krishna")
 
-    assert seeded_coordinator.get_child("child_krishna").points == 95, (
-        "Krishna should be charged the dynamic 105, not the stale manual 10"
+    assert seeded_coordinator.get_child("child_krishna").points == 92, (
+        "Krishna should be charged the dynamic 108, not the stale manual 10"
     )
     assert SEED_CLAIM_ID in _claim_ids(seeded_coordinator), (
         "the pre-existing claim for a different reward must be left alone"
@@ -131,8 +135,8 @@ async def test_claiming_without_enough_points_reports_the_effective_cost(
     with pytest.raises(ValueError) as excinfo:
         await seeded_coordinator.async_claim_reward("reward_screen", "child_krishna")
 
-    assert str(excinfo.value) == "Not enough points. Need 105, have 25", (
-        "the shortfall message must quote the dynamic 105, not the stored cost of 10"
+    assert str(excinfo.value) == "Not enough points. Need 108, have 25", (
+        "the shortfall message must quote the dynamic 108, not the stored cost of 10"
     )
     assert _claim_ids(seeded_coordinator) == [SEED_CLAIM_ID], (
         "a refused claim must not be persisted"
@@ -143,7 +147,7 @@ async def test_claiming_with_exactly_the_price_succeeds_and_zeroes_the_balance(
     seeded_coordinator: ChoremanderCoordinator,
 ) -> None:
     """The affordability check is `<`, so paying your last point is allowed."""
-    await _set_balance(seeded_coordinator, "child_krishna", 105)
+    await _set_balance(seeded_coordinator, "child_krishna", 108)
 
     await seeded_coordinator.async_claim_reward("reward_screen", "child_krishna")
 
@@ -252,8 +256,8 @@ async def test_rejecting_a_claim_refunds_the_points_and_deletes_the_claim(
     """With nothing else changing, reject is a clean inverse of claim."""
     await _set_balance(seeded_coordinator, "child_krishna", 200)
     claim = await seeded_coordinator.async_claim_reward("reward_screen", "child_krishna")
-    assert seeded_coordinator.get_child("child_krishna").points == 95, (
-        "precondition: the claim charged 105"
+    assert seeded_coordinator.get_child("child_krishna").points == 92, (
+        "precondition: the claim charged 108"
     )
 
     await seeded_coordinator.async_reject_reward(claim.id)
@@ -280,28 +284,28 @@ async def test_rejecting_a_claim_reprices_it_and_can_destroy_points(
     `async_reject_reward` calls `calculate_dynamic_reward_costs` again at
     rejection time instead of refunding what was actually charged, so any chore
     edit in between silently creates or destroys points. Here deleting Do
-    Homework drops Krishna from 15.0 to 10.0 points/day, the screen-time price
-    falls from 105 to 70, and he is refunded 35 less than he paid. This test
-    pins today's behaviour so a future fix shows up as a deliberate change.
+    Homework drops Krishna from 15+3/7 to 10+3/7 points/day, the screen-time
+    price falls from 108 to 73, and he is refunded 35 less than he paid. This
+    test pins today's behaviour so a future fix shows up as a deliberate change.
     """
     await _set_balance(seeded_coordinator, "child_krishna", 200)
     claim = await seeded_coordinator.async_claim_reward("reward_screen", "child_krishna")
-    assert seeded_coordinator.get_child("child_krishna").points == 95, (
-        "precondition: the claim charged 105"
+    assert seeded_coordinator.get_child("child_krishna").points == 92, (
+        "precondition: the claim charged 108"
     )
 
     await seeded_coordinator.async_remove_chore("chore_homework")
     reprice = seeded_coordinator.calculate_dynamic_reward_costs(
         seeded_coordinator.get_reward("reward_screen")
     )
-    assert reprice["child_krishna"] == 70, (
-        "losing the 5-point chore reprices screen time to 10.0/day x 7 days"
+    assert reprice["child_krishna"] == 73, (
+        "losing the 5-point daily chore reprices screen time to (10+3/7)/day x 7 days"
     )
 
     await seeded_coordinator.async_reject_reward(claim.id)
 
     assert seeded_coordinator.get_child("child_krishna").points == 165, (
-        "Krishna paid 105 but is refunded only the new price of 70, permanently "
+        "Krishna paid 108 but is refunded only the new price of 73, permanently "
         "losing 35 points; a correct implementation would restore him to 200"
     )
 
@@ -316,8 +320,8 @@ async def test_rejecting_a_claim_whose_reward_was_deleted_refunds_nothing(
     await seeded_coordinator.async_remove_reward("reward_screen")
     await seeded_coordinator.async_reject_reward(claim.id)
 
-    assert seeded_coordinator.get_child("child_krishna").points == 95, (
-        "with no reward left to price, the 105 that was charged is simply lost"
+    assert seeded_coordinator.get_child("child_krishna").points == 92, (
+        "with no reward left to price, the 108 that was charged is simply lost"
     )
     assert claim.id not in _claim_ids(seeded_coordinator), (
         "the claim is still deleted even though no refund was possible"

@@ -145,14 +145,28 @@ def warnings_from_coordinator(caplog: pytest.LogCaptureFixture) -> list[str]:
 def test_dev_seed_daily_points_sum_each_childs_assigned_chores(
     seeded_coordinator: ChoremanderCoordinator,
 ) -> None:
-    """Krishna earns 15 pts/day, Radha 13, from the seeded chore assignments."""
+    """The seeded schedules are part of the arithmetic, not a note beside it.
+
+    Three of the seed's eleven chores carry a rule, and all three are Meera's:
+    Feed the Fish falls on every day but Sunday, Take Out the Bins on Mondays
+    and Thursdays, and Wash the Dishes alternates between Krishna and Meera on
+    Wednesdays and Saturdays. Krishna and Radha's own chores carry no rule at
+    all, so their rates are the plain sums this function returned before
+    schedules existed - which is what the dishes rotation is here to disturb.
+    """
     daily = seeded_coordinator.get_child_daily_points(
         seeded_coordinator.get_reward("reward_screen")
     )
 
-    assert daily == {"child_krishna": 15.0, "child_radha": 13.0}, (
-        "Krishna's shared+own chores (2+1+3+5+1+3) should total 15 pts/day and "
-        f"Radha's (2+1+2+4+1+3) 13 pts/day, got {daily}"
+    assert daily == {
+        "child_krishna": 15 + 3 / 7,
+        "child_radha": 13.0,
+        "child_meera": 2 * (6 / 7) + 4 * (2 / 7) + 3 * (1 / 7),
+    }, (
+        "Krishna's unscheduled chores (2+1+3+5+1+3) are 15 pts/day and his "
+        "Wednesday on the dishes adds 3x1/7; Radha's (2+1+2+4+1+3) are exactly "
+        "13 with nothing scheduled to scale them; Meera is on the fish six days "
+        f"in seven, the bins two and her Saturday dishes one. Got {daily}"
     )
 
 
@@ -164,9 +178,10 @@ def test_screen_time_costs_each_child_seven_days_of_their_own_earnings(
         seeded_coordinator.get_reward("reward_screen")
     )
 
-    assert costs == {"child_krishna": 105, "child_radha": 91}, (
-        "30 Min Screen Time has days_to_goal=7, so Krishna should pay 15x7=105 "
-        f"and Radha 13x7=91 - the static cost of 10 is ignored. Got {costs}"
+    assert costs == {"child_krishna": 108, "child_radha": 91, "child_meera": 23}, (
+        "30 Min Screen Time has days_to_goal=7, so Krishna should pay "
+        f"(15+3/7)x7=108, Radha 13x7=91 and Meera (23/7)x7=23 - the static cost "
+        f"of 10 is ignored. Got {costs}"
     )
 
 
@@ -178,23 +193,23 @@ def test_movie_night_jackpot_charges_every_child_the_pooled_family_total(
         seeded_coordinator.get_reward("reward_movie_night")
     )
 
-    assert costs == {"child_krishna": 392, "child_radha": 392}, (
-        "Family Movie Night is a jackpot with days_to_goal=14, so both children "
-        f"should see (15+13)x14=392, got {costs}"
+    assert costs == {"child_krishna": 444, "child_radha": 444, "child_meera": 444}, (
+        "Family Movie Night is a jackpot with days_to_goal=14, so every child "
+        f"should see (15+3/7 + 13 + 23/7)x14=444, got {costs}"
     )
 
 
 def test_zoo_trip_jackpot_uses_thirty_days_of_the_pooled_total(
     seeded_coordinator: ChoremanderCoordinator,
 ) -> None:
-    """Same pooling, longer horizon: 28 pts/day x 30 days."""
+    """Same pooling, longer horizon: 31 5/7 pts/day x 30 days."""
     costs = seeded_coordinator.calculate_dynamic_reward_costs(
         seeded_coordinator.get_reward("reward_zoo_trip")
     )
 
-    assert costs == {"child_krishna": 840, "child_radha": 840}, (
-        "Trip to the Zoo is a jackpot with days_to_goal=30, so both children "
-        f"should see (15+13)x30=840, got {costs}"
+    assert costs == {"child_krishna": 951, "child_radha": 951, "child_meera": 951}, (
+        "Trip to the Zoo is a jackpot with days_to_goal=30, so every child "
+        f"should see (15+3/7 + 13 + 23/7)x30 rounded to 951, got {costs}"
     )
 
 
@@ -221,13 +236,14 @@ def test_get_child_daily_points_ignores_override_and_jackpot_flags(
     game = seeded_coordinator.get_reward("reward_krishna_game")
     zoo = seeded_coordinator.get_reward("reward_zoo_trip")
 
-    assert seeded_coordinator.get_child_daily_points(game) == {"child_krishna": 15.0}, (
-        "get_child_daily_points must report Krishna's real 15.0 pts/day even for "
-        "an override reward whose price is pinned at 50"
+    assert seeded_coordinator.get_child_daily_points(game) == {"child_krishna": 15 + 3 / 7}, (
+        "get_child_daily_points must report Krishna's real 15+3/7 pts/day even "
+        "for an override reward whose price is pinned at 50"
     )
     assert seeded_coordinator.get_child_daily_points(zoo) == {
-        "child_krishna": 15.0,
+        "child_krishna": 15 + 3 / 7,
         "child_radha": 13.0,
+        "child_meera": 2 * (6 / 7) + 4 * (2 / 7) + 3 * (1 / 7),
     }, (
         "get_child_daily_points must report per-child rates for a jackpot too - "
         "it never pools, unlike calculate_dynamic_reward_costs"
@@ -665,14 +681,14 @@ def test_singular_cost_wrapper_prefers_the_named_child_then_the_first_price(
     screen = seeded_coordinator.get_reward("reward_screen")
 
     assert seeded_coordinator.calculate_dynamic_reward_cost(screen, "child_radha") == 91, (
-        "Asking for Radha's price must return her own 13x7=91, not Krishna's 105"
+        "Asking for Radha's price must return her own 13x7=91, not Krishna's 108"
     )
-    assert seeded_coordinator.calculate_dynamic_reward_cost(screen, "nobody") == 105, (
+    assert seeded_coordinator.calculate_dynamic_reward_cost(screen, "nobody") == 108, (
         "An unknown child_id falls through to the first price in the dict, which "
-        "is Krishna's 105 - there is no assignment validation here"
+        "is Krishna's 108 - there is no assignment validation here"
     )
-    assert seeded_coordinator.calculate_dynamic_reward_cost(screen) == 105, (
-        "Omitting child_id also returns the first computed price, 105"
+    assert seeded_coordinator.calculate_dynamic_reward_cost(screen) == 108, (
+        "Omitting child_id also returns the first computed price, 108"
     )
 
 

@@ -212,6 +212,17 @@ export class ChildCard {
     return this.root.locator(".chore-name");
   }
 
+  /**
+   * What the card says instead of a chore list.
+   *
+   * One element for three different sentences - "Day off", "All Done!" and
+   * "Nothing here" - because which of them is showing is the assertion, and a
+   * handle per message would let a test pass by matching nothing.
+   */
+  get emptyState(): Locator {
+    return this.root.locator(".empty-state");
+  }
+
   get childName(): Locator {
     return this.root.locator(".child-name");
   }
@@ -248,6 +259,57 @@ export class ChildCard {
       await expect(overlay.first()).toBeHidden({ timeout: 10_000 });
     }
   }
+}
+
+/**
+ * Build a child card the fixture's dashboards do not carry, on the open page.
+ *
+ * The Lovelace views in dev/fixtures cover two of the three children, and a
+ * state that only the third can reach - a scheduled day off, say - would
+ * otherwise be untestable in a browser. The card is given the same `hass`
+ * object Home Assistant hands its own cards, so it renders exactly what a view
+ * would; nothing here stubs or fabricates state.
+ *
+ * That object is re-read on a timer because Home Assistant replaces it wholesale
+ * on every state change and only pushes the new one into the cards it owns.
+ * Without the timer this card would be frozen at whatever had loaded, and a
+ * service call made from a test would never reach it.
+ *
+ * Call `openDashboard` first: the page has to have Home Assistant on it, and
+ * loading any dashboard is what registers the card's custom element.
+ */
+export async function mountChildCard(
+  page: Page,
+  config: Record<string, unknown>,
+): Promise<ChildCard> {
+  const id = `probe-${Date.now().toString(36)}`;
+
+  await page.evaluate(
+    ({ id, config }) => {
+      const app = document.querySelector("home-assistant") as (HTMLElement & {
+        hass?: unknown;
+      }) | null;
+      if (!app) throw new Error("no <home-assistant> on the page to take hass from");
+
+      const card = document.createElement("choremander-child-card") as HTMLElement & {
+        setConfig: (c: Record<string, unknown>) => void;
+        hass: unknown;
+      };
+      card.setConfig(config);
+      card.id = id;
+      document.body.appendChild(card);
+
+      const sync = () => {
+        card.hass = app.hass;
+      };
+      sync();
+      // Cleared by the page going away at the end of the test.
+      window.setInterval(sync, 250);
+    },
+    { id, config },
+  );
+
+  return new ChildCard(page.locator(`#${id}`));
 }
 
 export class ApprovalsCard {
@@ -480,7 +542,8 @@ export async function openDashboard(page: Page, path: string): Promise<void> {
   await expect(
     page.locator(
       "choremander-child-card, choremander-approvals-card, choremander-points-card, " +
-        "choremander-rewards-card, choremander-activity-card, choremander-streak-card",
+        "choremander-rewards-card, choremander-activity-card, choremander-streak-card, " +
+        "choremander-schedule-card",
     ),
   ).not.toHaveCount(0, { timeout: 30_000 });
 }
@@ -618,6 +681,17 @@ export class StreakCard {
     return this.child(childId).locator(".dot.today-idle");
   }
 
+  /**
+   * Days the schedule gave this child off.
+   *
+   * Today counts: a rest day that happens to be today is drawn as
+   * `rest today-rest`, so this handle finds it either way and a test does not
+   * have to know which weekday it is running on.
+   */
+  restDots(childId: string): Locator {
+    return this.child(childId).locator(".dot.rest");
+  }
+
   badges(childId: string): Locator {
     return this.child(childId).locator(".badge");
   }
@@ -632,5 +706,112 @@ export class StreakCard {
 
   avatar(childId: string): Locator {
     return this.child(childId).locator(".avatar");
+  }
+}
+
+/**
+ * The schedule card - a fortnight of whose turn it is, and the rota editor.
+ *
+ * Cells are addressed by chore id and ISO date rather than by row and column.
+ * The window starts on whichever Monday the sensor published, so a handle built
+ * out of grid coordinates would point at a different fortnight every week,
+ * whereas the date a test derives from `window_start` is the same date the card
+ * stamped onto the cell.
+ */
+export class ScheduleCard {
+  constructor(readonly root: Locator) {}
+
+  /** The card left entirely at its defaults. */
+  static default(page: Page): ScheduleCard {
+    return new ScheduleCard(page.locator("choremander-schedule-card:not([density])").first());
+  }
+
+  static byTitle(page: Page, title: string): ScheduleCard {
+    return new ScheduleCard(
+      page
+        .locator("choremander-schedule-card")
+        .filter({ has: page.locator(".header-title", { hasText: exactTitle(title) }) }),
+    );
+  }
+
+  /**
+   * The card that is aimed at the wrong sensor.
+   *
+   * Deliberately not `byTitle`: a card in the configuration-error state renders
+   * only the error, header and all, so there is no `.header-title` left to
+   * filter on and a title lookup can never match. Every card in
+   * `misconfigured-entity.spec.ts` is found this way for the same reason.
+   */
+  static misconfigured(page: Page): ScheduleCard {
+    return new ScheduleCard(
+      page
+        .locator("choremander-schedule-card")
+        .filter({ has: page.locator(".config-error") }),
+    );
+  }
+
+  static byDensity(page: Page, density: "cozy" | "compact"): ScheduleCard {
+    return new ScheduleCard(page.locator(`choremander-schedule-card[density="${density}"]`));
+  }
+
+  get weekLabel(): Locator {
+    return this.root.locator(".week-label");
+  }
+
+  get previousWeek(): Locator {
+    return this.root.locator(".nav.prev");
+  }
+
+  get nextWeek(): Locator {
+    return this.root.locator(".nav.next");
+  }
+
+  get choreNames(): Locator {
+    return this.root.locator(".chore-name");
+  }
+
+  /** The seven weekday columns, letter and date. */
+  get dayHeads(): Locator {
+    return this.root.locator(".day-head");
+  }
+
+  choreName(choreId: string): Locator {
+    return this.root.locator(`.chore-name[data-chore-id="${choreId}"]`);
+  }
+
+  cell(choreId: string, date: string): Locator {
+    return this.root.locator(`.cell[data-chore-id="${choreId}"][data-date="${date}"]`);
+  }
+
+  /** The initials drawn in one cell - who is on that chore that day. */
+  who(choreId: string, date: string): Locator {
+    return this.cell(choreId, date).locator(".initials");
+  }
+
+  /** The dot marking a cell someone set by hand rather than by the pattern. */
+  exceptionMarker(choreId: string, date: string): Locator {
+    return this.cell(choreId, date).locator(".marker");
+  }
+
+  /** Shown instead of the grid when no chore in the house carries a rule. */
+  get emptyState(): Locator {
+    return this.root.locator(".empty-state");
+  }
+
+  get error(): Locator {
+    return this.root.locator(".error");
+  }
+
+  /** The picker that puts a chore with no rule yet onto the schedule. */
+  get picker(): Locator {
+    return this.root.locator(".add-select");
+  }
+
+  get cellDialog(): Locator {
+    return this.root.locator(".cell-dialog");
+  }
+
+  get ruleDialog(): Locator {
+    return this.root.locator(".rule-dialog");
   }
 }

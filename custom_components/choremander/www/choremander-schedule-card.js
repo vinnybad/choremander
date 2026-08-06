@@ -9,6 +9,16 @@
  * arithmetic in `schedule.py`. Every edit goes back through
  * `choremander.set_chore_schedule`, which is the only writer.
  *
+ * The same sensor carries `rules`, each chore's stored rule verbatim, and this
+ * card reads every editing decision out of it rather than out of the resolved
+ * grid. That distinction is the whole of the editing model: the grid says what
+ * is true on a day, and cannot say why. A Saturday somebody is on might be a
+ * due day or a one-off swap, and every field the service takes replaces its
+ * stored value wholesale - so a card that guessed would turn "Maya covers this
+ * Saturday" into "due every Saturday", and would delete the overrides it never
+ * saw. Nothing below infers a rule; it either reads one or leaves the field
+ * out of the call.
+ *
  * Version: 0.0.1 - Initial release
  * Last Updated: 2026-08-05
  */
@@ -36,23 +46,35 @@ const DAY_NAMES = [
 
 const DAY_INITIALS = ["M", "T", "W", "T", "F", "S", "S"];
 
-/**
- * The rotation cadences, with "leave unchanged" first.
- *
- * The schedule sensor publishes the *resolution* of a rule, never the rule, so
- * this card cannot show a parent which cadence a chore is already on. Offering
- * "leave unchanged" is how the form stays honest about that: an untouched
- * control sends no field at all, and the service leaves what it cannot see
- * alone rather than resetting it to whatever the form happened to display.
- */
+/** The cadences `schedule.py` implements, said the way a parent would say them. */
 const ROTATIONS = [
-  { value: "", label: "Leave unchanged" },
   { value: "none", label: "No rotation - everyone assigned" },
   { value: "occurrence", label: "Take turns each time" },
   { value: "week", label: "A whole week each" },
 ];
 
+/**
+ * A rule as this card reads it: every field present, at its default if the
+ * sensor left it out.
+ *
+ * The payload omits defaults to stay inside the recorder's attribute budget, so
+ * a missing key means "the default" and never "unknown". Filling them in once,
+ * here, is what lets the rest of the card compare what a parent typed against
+ * what is stored without every call site repeating the fallbacks.
+ */
+const RULE_DEFAULTS = {
+  due_days: [],
+  rotation: "none",
+  rotation_order: [],
+  rotation_anchor: "",
+  day_overrides: {},
+  date_overrides: {},
+};
+
 class ChoremanderScheduleCard extends LitElement {
+  /** Accepted values for the `density` option, loosest first. */
+  static DENSITIES = ["default", "cozy", "compact"];
+
   static get properties() {
     return {
       hass: { type: Object },
@@ -70,14 +92,6 @@ class ChoremanderScheduleCard extends LitElement {
     this._cell = null;
     this._rule = null;
     this._saving = false;
-
-    // Overrides written during this card's lifetime, per chore. `day_overrides`
-    // and `date_overrides` are whole-dictionary fields - sending one key
-    // replaces the lot - and nothing published to the frontend says what a
-    // chore's dictionaries already hold. Remembering what this card wrote is
-    // the most it can carry forward, so at least two edits in a row do not
-    // undo each other.
-    this._written = { days: {}, dates: {} };
   }
 
   static get styles() {
@@ -98,7 +112,7 @@ class ChoremanderScheduleCard extends LitElement {
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 16px 20px;
+        padding: var(--chm-header-padding, 16px 20px);
         background: linear-gradient(
           135deg,
           var(--chm-color-blue, #3498db) 0%,
@@ -108,13 +122,13 @@ class ChoremanderScheduleCard extends LitElement {
       }
 
       .header-icon {
-        --mdc-icon-size: 28px;
+        --mdc-icon-size: var(--chm-header-icon-size, 28px);
         flex-shrink: 0;
         opacity: 0.95;
       }
 
       .header-title {
-        font-size: 1.3rem;
+        font-size: var(--chm-header-title-font-size, 1.3rem);
         font-weight: 700;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -167,8 +181,8 @@ class ChoremanderScheduleCard extends LitElement {
       .grid {
         display: grid;
         grid-template-columns: minmax(84px, 1.4fr) repeat(7, minmax(0, 1fr));
-        gap: 4px;
-        padding: 12px 16px 4px;
+        gap: var(--chm-schedule-grid-gap, 4px);
+        padding: var(--chm-schedule-grid-padding, 12px 16px 4px);
       }
 
       .day-head {
@@ -178,7 +192,7 @@ class ChoremanderScheduleCard extends LitElement {
         gap: 2px;
         padding-bottom: 4px;
         color: var(--secondary-text-color);
-        font-size: 0.75rem;
+        font-size: var(--chm-schedule-day-head-font-size, 0.75rem);
       }
 
       .day-head .letter {
@@ -201,6 +215,7 @@ class ChoremanderScheduleCard extends LitElement {
         background: transparent;
         color: var(--primary-text-color);
         font: inherit;
+        font-size: var(--chm-schedule-chore-font-size, 1rem);
         font-weight: 500;
         text-align: left;
         cursor: pointer;
@@ -230,8 +245,8 @@ class ChoremanderScheduleCard extends LitElement {
         align-items: center;
         justify-content: center;
         gap: 2px;
-        min-height: 40px;
-        padding: 4px 2px;
+        min-height: var(--chm-schedule-cell-min-height, 40px);
+        padding: var(--chm-schedule-cell-padding, 4px 2px);
         border: 1px solid var(--divider-color);
         border-radius: 8px;
         background: var(--card-background-color);
@@ -248,15 +263,18 @@ class ChoremanderScheduleCard extends LitElement {
         border-color: var(--chm-schedule-today);
       }
 
-      .cell.empty::after {
+      /* Deliberately not called "empty": that name belongs to the whole-card
+         message below, whose padding would win here at equal specificity and
+         blow every unoccupied cell out to 24px of its own. */
+      .cell.nobody::after {
         content: "·";
         color: var(--secondary-text-color);
         font-size: 1.2rem;
         line-height: 1;
       }
 
-      /* A cell that does not repeat the way the rest of the chore's week does.
-         It is the exception the parent typed, and it stays visibly an
+      /* A day the rule names outright - a one-off swap, or a weekday the parent
+         has pinned. It is the exception to the pattern, and it stays visibly an
          exception. */
       .cell.exception {
         border-style: dashed;
@@ -276,13 +294,14 @@ class ChoremanderScheduleCard extends LitElement {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 22px;
-        height: 22px;
+        min-width: var(--chm-schedule-initials-size, 22px);
+        height: var(--chm-schedule-initials-size, 22px);
         padding: 0 4px;
-        border-radius: 11px;
+        /* Half the height, so the pill stays a pill at every density. */
+        border-radius: calc(var(--chm-schedule-initials-size, 22px) / 2);
         background: var(--primary-color);
         color: var(--text-primary-color, white);
-        font-size: 0.72rem;
+        font-size: var(--chm-schedule-initials-font-size, 0.72rem);
         font-weight: 700;
       }
 
@@ -292,7 +311,7 @@ class ChoremanderScheduleCard extends LitElement {
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 12px 16px 16px;
+        padding: var(--chm-schedule-add-padding, 12px 16px 16px);
       }
 
       .add-row ha-icon {
@@ -315,7 +334,7 @@ class ChoremanderScheduleCard extends LitElement {
 
       /* ---------------------------------------------------------- states */
 
-      .empty,
+      .empty-state,
       .error,
       .hint {
         padding: 24px 20px;
@@ -327,7 +346,7 @@ class ChoremanderScheduleCard extends LitElement {
         color: var(--error-color, #db4437);
       }
 
-      .empty strong {
+      .empty-state strong {
         display: block;
         margin-bottom: 4px;
         color: var(--primary-text-color);
@@ -480,10 +499,51 @@ class ChoremanderScheduleCard extends LitElement {
         font-size: 0.8rem;
       }
 
+      /* --------------------------------------------------------- density */
+
+      /* Only sizing, never colour or structure: the grid is seven columns of
+         cells at every density, so a household that picks one is choosing how
+         much of the dashboard a fortnight costs them, not a different card.
+         The attribute is absent at "default", which is why these are variables
+         with fallbacks rather than a third block repeating the defaults. */
+
+      :host([density="cozy"]) {
+        --chm-header-padding: 12px 16px;
+        --chm-header-icon-size: 24px;
+        --chm-header-title-font-size: 1.15rem;
+        --chm-schedule-grid-padding: 10px 12px 4px;
+        --chm-schedule-grid-gap: 3px;
+        --chm-schedule-cell-min-height: 34px;
+        --chm-schedule-chore-font-size: 0.95rem;
+        --chm-schedule-initials-size: 20px;
+        --chm-schedule-initials-font-size: 0.68rem;
+        --chm-schedule-add-padding: 10px 12px 12px;
+      }
+
+      :host([density="compact"]) {
+        --chm-header-padding: 8px 12px;
+        --chm-header-icon-size: 20px;
+        --chm-header-title-font-size: 1.05rem;
+        --chm-schedule-grid-padding: 8px 10px 4px;
+        --chm-schedule-grid-gap: 2px;
+        --chm-schedule-cell-min-height: 28px;
+        --chm-schedule-cell-padding: 2px 1px;
+        --chm-schedule-day-head-font-size: 0.68rem;
+        --chm-schedule-chore-font-size: 0.88rem;
+        --chm-schedule-initials-size: 17px;
+        --chm-schedule-initials-font-size: 0.6rem;
+        --chm-schedule-add-padding: 8px 10px 10px;
+      }
+
       @media (max-width: 500px) {
+        /* Set on the host rather than on .grid so a density still wins: the
+           attribute selectors above outrank :host whatever the source order. */
+        :host {
+          --chm-schedule-grid-padding: 10px 8px 4px;
+        }
+
         .grid {
           grid-template-columns: minmax(64px, 1.2fr) repeat(7, minmax(0, 1fr));
-          padding: 10px 8px 4px;
         }
 
         .week-label {
@@ -504,12 +564,51 @@ class ChoremanderScheduleCard extends LitElement {
       // else: the chore roster, and with it every chore that has no rule yet,
       // only exists on the overview sensor.
       chores_entity: "sensor.choremander_overview",
+      density: "default", // "default" | "cozy" | "compact"
       ...config,
     };
+
+    if (!ChoremanderScheduleCard.DENSITIES.includes(this.config.density)) {
+      // Coerce rather than throw - one mistyped option should not replace the
+      // whole card with an error.
+      console.warn(
+        `[Choremander] Unknown density "${this.config.density}". ` +
+          `Expected one of ${ChoremanderScheduleCard.DENSITIES.join(", ")}. Falling back to "default".`
+      );
+      this.config = { ...this.config, density: "default" };
+    }
+
+    this._syncLayoutAttributes();
+  }
+
+  /**
+   * Mirror the layout options onto the host, which is what the :host([...])
+   * rules select on. The attribute is removed at its default rather than set
+   * to "default", so a card that never opted in matches none of those rules.
+   */
+  _syncLayoutAttributes() {
+    if (!this.config) return;
+
+    if (this.config.density && this.config.density !== "default") {
+      this.setAttribute("density", this.config.density);
+    } else {
+      this.removeAttribute("density");
+    }
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    // setConfig can run before the element is in the document, and Lovelace
+    // reuses card elements across view switches, so re-assert on connect.
+    this._syncLayoutAttributes();
   }
 
   getCardSize() {
-    return 4;
+    // Cozy and compact land on the same number of masonry rows on purpose: what
+    // a density trims is the height of a cell, and a row of seven of them only
+    // shrinks so far before the header and the day letters are the whole card.
+    const sizes = { default: 4, cozy: 3, compact: 3 };
+    return sizes[this.config?.density] ?? 4;
   }
 
   static getConfigElement() {
@@ -532,11 +631,16 @@ class ChoremanderScheduleCard extends LitElement {
    * working and genuinely has nothing to show. Declaring what the card needs is
    * what lets `_missingData` tell those two apart (issue #5).
    *
+   * `rules` is in the list because editing is unsafe without it. Every
+   * override field replaces its stored dictionary wholesale, so a card that
+   * saved against a payload carrying no rules would delete every override it
+   * could not see. Refusing to draw is the only honest answer to that.
+   *
    * A `name[].field` entry means the attribute must be a list whose entries
    * carry that field.
    */
   static get requiredData() {
-    return ["window_start", "days", "chores"];
+    return ["window_start", "days", "chores", "rules"];
   }
 
   /** Which of `requiredData` this entity does not carry. */
@@ -663,81 +767,115 @@ class ChoremanderScheduleCard extends LitElement {
       .filter((id) => id);
   }
 
+  /** The schedule attributes as the sensor has them right now. */
+  _attributes() {
+    return this.hass?.states[this.config.entity]?.attributes || {};
+  }
+
   /**
-   * The cells that read as exceptions rather than as the rule.
+   * The stored rule for a chore, every field filled in.
    *
-   * The sensor publishes resolved days, never the rules behind them, so
-   * "overridden" cannot be read off the payload directly. What can be read is
-   * repetition: a chore whose two published weeks are identical bar a day or
-   * two is a weekly pattern with exceptions in it, and those days are the
-   * exceptions. A chore whose weeks differ broadly is a rotation working as
-   * intended - marking every cell of it would be noise, so nothing is marked.
+   * A chore with no rule at all is absent from `chores` entirely, and reads
+   * here as the all-defaults rule - which is exactly what it has: no due days,
+   * no rotation, no overrides, on every day for whoever it is assigned to.
+   * Copies are returned so a caller editing a dictionary cannot reach into the
+   * entity's attributes and change what the next render draws.
+   */
+  _ruleFor(attributes, choreId) {
+    const index = (attributes.chores || []).indexOf(choreId);
+    const stored = (index === -1 ? null : (attributes.rules || [])[index]) || {};
+    return {
+      due_days: [...(stored.due_days || RULE_DEFAULTS.due_days)],
+      rotation: stored.rotation || RULE_DEFAULTS.rotation,
+      rotation_order: [...(stored.rotation_order || RULE_DEFAULTS.rotation_order)],
+      rotation_anchor: stored.rotation_anchor || RULE_DEFAULTS.rotation_anchor,
+      day_overrides: { ...(stored.day_overrides || RULE_DEFAULTS.day_overrides) },
+      date_overrides: { ...(stored.date_overrides || RULE_DEFAULTS.date_overrides) },
+    };
+  }
+
+  /**
+   * The days a rule stores as due, lowercased and Monday first.
    *
-   * One-off overrides written from this card are added outright, because there
-   * the card knows rather than infers.
+   * `schedule.py` compares due days case-insensitively but stores and publishes
+   * them verbatim, so a chore written by hand as `["Monday","Wednesday"]` is a
+   * Monday-and-Wednesday chore and the grid draws it as one. Matching that
+   * case-sensitively would light no chips in the rule dialog, tell the parent
+   * the chore was on no schedule at all, and offer to save that back - deleting
+   * the pattern the grid behind the dialog is still showing them.
+   */
+  _dueDaysOf(rule) {
+    const stored = new Set(
+      (rule.due_days || []).map((name) => String(name).toLowerCase())
+    );
+    return DAY_NAMES.filter((name) => stored.has(name));
+  }
+
+  /**
+   * Whether an override map holds an entry the integration would find for `key`.
+   *
+   * `_override_for` matches keys case-insensitively, so `{"Friday": [...]}` from
+   * a hand-written automation *is* a Friday override and has to be drawn as the
+   * exception it is rather than as the pattern.
+   */
+  _hasOverride(overrides, key) {
+    const wanted = String(key).toLowerCase();
+    return Object.keys(overrides).some(
+      (stored) => String(stored).toLowerCase() === wanted
+    );
+  }
+
+  /**
+   * `overrides` with `key` set, replacing any key that already means the same.
+   *
+   * Because the integration matches case-insensitively, a rule already carrying
+   * `{"Friday": ["child_m"]}` must not come back with a second `"friday"` beside
+   * it: the lookup returns whichever was stored first, so the parent's edit
+   * would sit in the rule permanently without ever being read, and the save
+   * would look like it had simply done nothing. One key per day, spelled the way
+   * this card spells it.
+   */
+  _withOverride(overrides, key, childIds) {
+    const wanted = String(key).toLowerCase();
+    const merged = {};
+    for (const [stored, value] of Object.entries(overrides)) {
+      if (String(stored).toLowerCase() !== wanted) {
+        merged[stored] = value;
+      }
+    }
+    merged[key] = childIds;
+    return merged;
+  }
+
+  /**
+   * The cells the rule names outright, rather than resolves to.
+   *
+   * A marked cell means the parent said something about this particular day:
+   * the date is in `date_overrides`, or its weekday is in `day_overrides`.
+   * Nothing else is marked, and in particular a rotation is not - a chore due
+   * Mondays that changes hands each week differs between the two published
+   * Mondays by design, and marking both would tell the parent they had
+   * overridden the very thing the rotation is doing for them.
    */
   _exceptions(attributes) {
     const marked = new Set();
-    const days = attributes.days || [];
-    const chores = attributes.chores || [];
+    const total = attributes.days?.length || 0;
 
-    chores.forEach((choreId, index) => {
-      const written = this._written.dates[choreId] || {};
-      Object.keys(written).forEach((dateKey) => {
-        const offset = this._offsetOf(attributes, dateKey);
-        if (offset !== -1) marked.add(`${index}:${offset}`);
-      });
-
-      if (days.length < 14) return;
-
-      const differing = [];
-      for (let weekday = 0; weekday < 7; weekday++) {
-        const first = this._rosterAt(attributes, index, weekday).join(",");
-        const second = this._rosterAt(attributes, index, weekday + 7).join(",");
-        if (first !== second) differing.push(weekday);
+    (attributes.chores || []).forEach((choreId, index) => {
+      const rule = this._ruleFor(attributes, choreId);
+      for (let offset = 0; offset < total; offset++) {
+        const day = this._dayAt(attributes.window_start, offset);
+        const weekday = DAY_NAMES[(day.getDay() + 6) % 7];
+        if (
+          this._hasOverride(rule.date_overrides, this._dateKey(day)) ||
+          this._hasOverride(rule.day_overrides, weekday)
+        ) {
+          marked.add(`${index}:${offset}`);
+        }
       }
-
-      // Three or more days apart is a chore that changes hands week by week,
-      // not a week with exceptions in it.
-      if (!differing.length || differing.length > 2) return;
-      differing.forEach((weekday) => {
-        marked.add(`${index}:${weekday}`);
-        marked.add(`${index}:${weekday + 7}`);
-      });
     });
 
     return marked;
-  }
-
-  /** Where a date sits in the published window, or -1 if it is outside it. */
-  _offsetOf(attributes, dateKey) {
-    const total = attributes.days?.length || 0;
-    for (let offset = 0; offset < total; offset++) {
-      if (this._dateKey(this._dayAt(attributes.window_start, offset)) === dateKey) {
-        return offset;
-      }
-    }
-    return -1;
-  }
-
-  /**
-   * The weekdays a chore currently falls on, read back off the grid.
-   *
-   * The rule editor has to open showing something, and this is the only
-   * evidence available. It is exact for a chore with fixed due days, which is
-   * the common case; a rotation shows the same weekdays either way, since a
-   * rotation changes who is on a day and not which days exist.
-   */
-  _observedDueDays(attributes, choreIndex) {
-    const total = attributes.days?.length || 0;
-    const found = new Set();
-    for (let offset = 0; offset < total; offset++) {
-      if (this._rosterAt(attributes, choreIndex, offset).length) {
-        const day = this._dayAt(attributes.window_start, offset);
-        found.add(DAY_NAMES[(day.getDay() + 6) % 7]);
-      }
-    }
-    return DAY_NAMES.filter((name) => found.has(name));
   }
 
   // -------------------------------------------------------------- writing
@@ -791,7 +929,7 @@ class ChoremanderScheduleCard extends LitElement {
       // schedules existed, and saying that is kinder than an empty grid.
       return html`
         <ha-card>
-          <div class="empty">
+          <div class="empty-state">
             <strong>${this.config.entity} is not available right now</strong>
             Until it comes back, every chore is on for whoever it is assigned to.
           </div>
@@ -851,7 +989,7 @@ class ChoremanderScheduleCard extends LitElement {
 
   _renderEmpty() {
     return html`
-      <div class="empty">
+      <div class="empty-state">
         <strong>Nothing is on a schedule yet</strong>
         Every chore is on every day, for whoever it is assigned to. Put one on a
         schedule below to give it days of its own.
@@ -894,13 +1032,15 @@ class ChoremanderScheduleCard extends LitElement {
 
       cells.push(html`
         <button
-          class="cell ${roster.length ? "" : "empty"} ${isException ? "exception" : ""} ${dateKey === todayKey ? "today" : ""}"
+          class="cell ${roster.length ? "" : "nobody"} ${isException ? "exception" : ""} ${dateKey === todayKey ? "today" : ""}"
           data-chore-id="${choreId}"
           data-date="${dateKey}"
           title="${this._choreName(choreId)} - ${this._longDate(day)}"
           @click="${() => this._openCell(attributes, choreIndex, offset)}"
         >
-          ${isException ? html`<span class="marker">•</span>` : ""}
+          ${isException
+            ? html`<span class="marker" title="Set by hand rather than by the pattern">•</span>`
+            : ""}
           ${roster.map(
             (childId) => html`
               <span class="initials" data-child-id="${childId}" title="${this._childName(childId)}"
@@ -986,6 +1126,7 @@ class ChoremanderScheduleCard extends LitElement {
 
   _renderCellDialog() {
     const cell = this._cell;
+    const stored = this._ruleFor(this._attributes(), cell.choreId);
     const weekdayLabel = cell.day.toLocaleDateString(undefined, { weekday: "long" });
 
     return html`
@@ -1032,6 +1173,13 @@ class ChoremanderScheduleCard extends LitElement {
               Every ${weekdayLabel}
             </button>
           </div>
+          ${cell.scope === "day" && cell.dateKey in stored.date_overrides
+            ? html`<div class="note">
+                ${this._shortDate(cell.day)} already has a one-off on it, and a
+                one-off wins over the weekday - so this ${weekdayLabel} keeps
+                what it has and the rest change.
+              </div>`
+            : ""}
 
           <div class="dialog-actions">
             <button
@@ -1064,17 +1212,18 @@ class ChoremanderScheduleCard extends LitElement {
 
   async _saveCell() {
     const cell = this._cell;
-    const bucket = cell.scope === "date" ? "dates" : "days";
     const key = cell.scope === "date" ? cell.dateKey : cell.weekday;
     const field = cell.scope === "date" ? "date_overrides" : "day_overrides";
 
-    const overrides = {
-      ...(this._written[bucket][cell.choreId] || {}),
-      [key]: cell.selected,
-    };
+    // The service replaces the whole dictionary, so the one day being edited is
+    // merged onto what is stored *now* rather than onto anything this card
+    // remembers writing. Read at save time, not at open time: the sensor is the
+    // shared state, and a second tab or a service call from an automation may
+    // have added an override since this dialog opened.
+    const stored = this._ruleFor(this._attributes(), cell.choreId)[field];
+    const overrides = this._withOverride(stored, key, cell.selected);
 
     if (await this._write({ chore_id: cell.choreId, [field]: overrides })) {
-      this._written[bucket][cell.choreId] = overrides;
       this._cell = null;
     }
   }
@@ -1082,17 +1231,34 @@ class ChoremanderScheduleCard extends LitElement {
   // --------------------------------------------------------- rule editing
 
   _openRule(attributes, choreId) {
-    const choreIndex = (attributes.chores || []).indexOf(choreId);
+    const stored = this._ruleFor(attributes, choreId);
+    const roster = (attributes.children || []).length
+      ? attributes.children
+      : this._childRoster().map((child) => child.id);
+
     this._rule = {
       choreId,
-      dueDays:
-        choreIndex === -1 ? [] : this._observedDueDays(attributes, choreIndex),
-      rotation: "",
-      order: [],
-      anchor: "",
-      children: (attributes.children || []).length
-        ? attributes.children
-        : this._childRoster().map((child) => child.id),
+      // Whether the sensor carries a rule for this chore at all. A chore it has
+      // never heard of reads as all-defaults above, which is what it behaves
+      // like but not necessarily what is on disk - see `_saveRule`.
+      scheduled: (attributes.chores || []).includes(choreId),
+      // Opened on the rule as stored, so the dialog says what this chore does
+      // rather than asking a parent to type it all out again to change one bit
+      // of it. Monday first, whatever order the days were stored in.
+      dueDays: this._dueDaysOf(stored),
+      rotation: stored.rotation,
+      order: stored.rotation_order,
+      anchor: stored.rotation_anchor,
+      // A rotation can still name a child who has left the household. Showing
+      // them is what lets a parent take them out; hiding them would leave the
+      // name in the rule with nothing in the dialog to remove it by.
+      children: [
+        ...roster,
+        ...stored.rotation_order.filter((childId) => !roster.includes(childId)),
+      ],
+      // What the rule said when this opened. Save diffs against it so a field
+      // the parent only looked at is not sent back - see `_saveRule`.
+      stored,
     };
   }
 
@@ -1121,10 +1287,17 @@ class ChoremanderScheduleCard extends LitElement {
           </div>
           ${rule.dueDays.length
             ? ""
-            : html`<div class="note">
-                No days picked means every day, which takes this chore off the
-                schedule entirely.
-              </div>`}
+            : rule.rotation === "none"
+              ? html`<div class="note">
+                  No days picked means every day, which takes this chore off the
+                  schedule entirely.
+                </div>`
+              : // Empty due days plus a rotation is still a schedule: the chore
+                // falls every day and the turns below decide whose it is.
+                html`<div class="note">
+                  No days picked means every day, with the turns below still
+                  deciding whose day it is.
+                </div>`}
 
           <div class="field-label">Rotation</div>
           <select
@@ -1169,8 +1342,9 @@ class ChoremanderScheduleCard extends LitElement {
           />
 
           <div class="note">
-            Rotation, order and start date are only sent when you set them here.
-            Anything left alone stays as it is.
+            This is the chore's rule as it stands. Only what you change here is
+            sent; anything you leave alone stays exactly as it is, one-off swaps
+            included.
           </div>
 
           <div class="dialog-actions">
@@ -1211,16 +1385,53 @@ class ChoremanderScheduleCard extends LitElement {
     this._rule = { ...rule, order };
   }
 
+  /** Whether two lists hold the same ids in the same order. */
+  _sameOrder(left, right) {
+    return (
+      left.length === right.length && left.every((item, index) => item === right[index])
+    );
+  }
+
   async _saveRule() {
     const rule = this._rule;
-    const data = { chore_id: rule.choreId, due_days: rule.dueDays };
+    const stored = rule.stored;
+    const anchor = rule.anchor.trim();
+    const storedDueDays = this._dueDaysOf(stored);
+    const data = { chore_id: rule.choreId };
 
-    // The three controls below default to "not mentioned", so a parent who
-    // came here to move a due day does not also rewrite a rotation this card
-    // was never told about.
-    if (rule.rotation) data.rotation = rule.rotation;
-    if (rule.order.length) data.rotation_order = rule.order;
-    if (rule.anchor.trim()) data.rotation_anchor = rule.anchor.trim();
+    // Only the fields the parent actually moved. Sending a field back because
+    // the form displayed it is not the no-op it looks like: the ids in it were
+    // read a dialog ago, and a household that has changed since would be
+    // written back as it was.
+    if (!this._sameOrder(rule.dueDays, storedDueDays)) {
+      data.due_days = rule.dueDays;
+    }
+    if (rule.rotation !== stored.rotation) data.rotation = rule.rotation;
+    if (!this._sameOrder(rule.order, stored.rotation_order)) {
+      data.rotation_order = rule.order;
+    }
+    if (anchor !== stored.rotation_anchor) data.rotation_anchor = anchor;
+
+    // Nothing moved, so there is nothing to say. Calling anyway would write a
+    // storage revision and a coordinator refresh for a dialog the parent
+    // opened to read.
+    if (Object.keys(data).length === 1) {
+      this._rule = null;
+      return;
+    }
+
+    // Putting a chore the sensor does not carry back on a schedule. `stored` is
+    // the all-defaults rule for such a chore, but only the fields `is_scheduled`
+    // looks at are actually known to be at their default: a rotation order left
+    // behind when this chore's due days were last cleared is still on disk, and
+    // the diff above would decline to overwrite an order it believes is already
+    // empty. So the turns are sent as the dialog showed them - `[]` included,
+    // which is a value the service writes - rather than left to a rule the
+    // parent cannot see revive itself the moment the chore is scheduled again.
+    if (!rule.scheduled) {
+      data.rotation_order = rule.order;
+      data.rotation_anchor = anchor;
+    }
 
     if (await this._write(data)) {
       this._rule = null;
@@ -1249,7 +1460,8 @@ class ChoremanderScheduleCardEditor extends LitElement {
         font-weight: 500;
       }
 
-      .form-group input {
+      .form-group input,
+      .form-group select {
         width: 100%;
         padding: 8px;
         border: 1px solid var(--divider-color);
@@ -1311,12 +1523,34 @@ class ChoremanderScheduleCardEditor extends LitElement {
         />
         <small>Optional custom title for the card</small>
       </div>
+
+      <div class="form-group">
+        <label>Density</label>
+        <select @change="${(event) => this._updateConfig("density", event.target.value)}">
+          <option value="default" ?selected="${(this.config.density || "default") === "default"}">
+            Default
+          </option>
+          <option value="cozy" ?selected="${this.config.density === "cozy"}">
+            Cozy — a bit tighter
+          </option>
+          <option value="compact" ?selected="${this.config.density === "compact"}">
+            Compact — fits a fortnight in less height
+          </option>
+        </select>
+        <small>How much room the grid takes up</small>
+      </div>
     `;
   }
 
+  /** Values the card already assumes; writing them down would just add noise. */
+  static LAYOUT_DEFAULTS = {
+    density: "default",
+  };
+
   _updateConfig(key, value) {
     const newConfig = { ...this.config, [key]: value };
-    if (value === undefined || value === "") {
+    const isDefault = ChoremanderScheduleCardEditor.LAYOUT_DEFAULTS[key] === value;
+    if (value === undefined || value === "" || isDefault) {
       delete newConfig[key];
     }
     const event = new CustomEvent("config-changed", {

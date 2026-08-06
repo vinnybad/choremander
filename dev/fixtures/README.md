@@ -1,7 +1,11 @@
 # Dev environment fixtures
 
-The canonical starting state for the local test environment: two children, eight
-chores, five rewards, and the three dashboards that display them.
+The canonical starting state for the local test environment: three children,
+eleven chores, five rewards, and the dashboards that display them.
+
+Three chores carry a day-of-week schedule, all of them Meera's or shared with
+her, so that the scheduling feature is visible in the container without moving
+any chore the browser specs expect to see every day.
 
 `lovelace_resources` seeds one resource Choremander does not own,
 `/local/third-party-card.js` (the file itself lives in `dev/config/www/`). It

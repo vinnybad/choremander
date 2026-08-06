@@ -86,9 +86,17 @@ Not all chores are equal. Some are easy (brush teeth), others take effort (homew
 |---------|-------------|
 | **Points** | Stars earned for completion |
 | **Time of Day** | Morning, Afternoon, Evening, Night, or Anytime |
-| **Completion % Per Month** | Expected completion rate (100 = daily, 50 = every other day) - used for smart reward pricing |
+| **Due Days** | The weekdays the chore falls on - bins on Mondays, piano on Tuesdays and Thursdays. Leave it empty and the chore falls every day, which is what every chore did before this existed |
+| **Completion % Per Month** | Of the days it *is* due, how often it actually gets done (100 = every time) - used for smart reward pricing |
 | **Daily Limit** | How many times per day the chore can be completed |
 | **Requires Approval** | Parent must approve before points are awarded |
+
+A chore on due days only shows up on its days: on a Tuesday the child card shows
+Tuesday's chores and nothing else. Children can also **take turns** on a shared
+chore - alternating each time it comes round, or a week each - and a single day
+can be handed to somebody else without disturbing the pattern ("Maya covers this
+Saturday"). Turns and one-off swaps are edited from the
+[Schedule Card](#schedule-card), which shows the whole rota a week at a time.
 
 ### Rewards
 
@@ -212,8 +220,37 @@ time_category: morning  # Optional: morning, afternoon, evening, night, anytime
 title: My Chores        # Optional
 density: compact        # Optional: default, cozy, compact
 show_header: false      # Optional: hide the avatar / name / balance strip
+schedule_entity: sensor.choremander_schedule  # Optional: whose turn it is today
 ```
 </details>
+
+<details>
+<summary>Options</summary>
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `entity` | required | The `sensor.choremander_overview` entity |
+| `child_id` | required | Which child the card is for |
+| `time_category` | `anytime` | `morning`, `afternoon`, `evening`, `night`, `anytime` or `all` |
+| `schedule_entity` | `sensor.choremander_schedule` | The sensor that says whose turn each chore is on each day. Point it at an entity that does not exist to ignore schedules entirely. YAML only - the visual editor does not ask for it |
+
+</details>
+
+**What the card shows today.** A chore that has a schedule rule is shown to
+whichever child the schedule says is on it today, and that chore's own
+**Assigned To** is not consulted - so a one-off cover ("Maya takes Saturday") or
+a turn that lands on a sibling appears on that child's card even though the
+chore belongs to someone else. A chore with no rule behaves exactly as it always
+did: it shows for whoever it is assigned to, every day. If the schedule sensor is
+missing or unavailable, every chore falls back to **Assigned To**.
+
+**Day off.** When a child has nothing scheduled today the card says "Day off"
+along with the next day they are actually on something ("Next chores tomorrow!",
+"Next chores Monday!", or nothing at all if no day in the published fortnight has
+anything for them). That is judged across *all* of the child's chores rather than
+only the ones this card's `time_category` shows, so a morning card and an evening
+card on the same dashboard never disagree about whether it is a rest day. A child
+who has simply finished everything still gets "All Done!".
 
 The same card at each `density` — the chores and the child are identical, only
 the option differs:
@@ -276,8 +313,15 @@ out from the chores that were actually approved, so the number and the dots can
 never tell different stories.
 
 A day counts once, however many chores were done in it, and a streak stays alive
-until a whole day has been missed - so it does not appear to collapse the moment
-the clock passes midnight.
+until a whole *working* day has been missed - so it does not appear to collapse
+the moment the clock passes midnight.
+
+A day the schedule asked nothing of a child is a day off, not a missed day. It
+draws as a hollow dot and the streak steps straight over it, so a child whose
+chores fall on weekdays keeps their streak through the weekend instead of losing
+it every Saturday. Doing a chore anyway still counts as an active day and wins
+over the day off. Households with no schedules have no days off at all, and the
+strip looks exactly as it always did.
 
 **Visual Editor:** Add `custom:choremander-streak-card` and pick the streaks
 entity.
@@ -420,9 +464,17 @@ answer.
 
 Click a cell to change who is on that chore, and pick whether it applies to just
 that date or to every one of that weekday - the same choice a calendar asks when
-you edit a repeating event. Click a chore's name to change the days it falls on
-and how the children take turns. A day that does not repeat the way the rest of
-the chore's week does is marked, so an exception stays visibly an exception.
+you edit a repeating event. Click a chore's name to open its rule: the days it
+falls on, whether the children take turns and in what order, and the date the
+turns are counted from. It opens showing what is stored, and sends only the
+fields you actually change - so saving a dialog you did not touch calls nothing
+at all, and moving a Saturday cannot quietly rewrite the rotation.
+
+A cell is dashed and carries a dot when the rule names that particular day: a
+one-off swap on that date, or a standing swap on that weekday. A rotation is
+never marked, because a chore due Mondays that changes hands each week is
+*supposed* to differ between the two Mondays - marking it would say you had
+overridden the very thing the rotation is doing for you.
 
 Chores with no rule at all are on every day, for whoever they are assigned to -
 which is how every chore behaved before schedules existed. They are not in the
@@ -440,6 +492,7 @@ type: custom:choremander-schedule-card
 entity: sensor.choremander_schedule
 chores_entity: sensor.choremander_overview
 title: Weekly Schedule
+density: compact  # Optional: default, cozy, compact
 ```
 </details>
 
@@ -451,8 +504,15 @@ title: Weekly Schedule
 | `entity` | required | The `sensor.choremander_schedule` entity |
 | `chores_entity` | `sensor.choremander_overview` | Where chore and child names come from, and the chores not yet scheduled |
 | `title` | `Weekly Schedule` | Header text |
+| `density` | `default` | `default`, `cozy` or `compact` - how much room the grid takes up |
 
 </details>
+
+The card reads `window_start`, `days`, `chores` and `rules` from the schedule
+sensor, and says which entity it needs rather than drawing if any of them is
+missing. `rules` is on that list because every override field replaces its stored
+value wholesale: a card that saved an edit against a payload carrying no rules
+would delete the swaps it could not see.
 
 ---
 
@@ -466,10 +526,10 @@ title: Weekly Schedule
 
 ### Custom Styling
 
-If `density` does not get you where you want, the Child, Rewards, Activity and
-Streak cards expose every size as a CSS custom property. Set one anywhere above the card - a
-Home Assistant theme, or a `card_mod` block on a single card - and it wins over
-the built-in value.
+If `density` does not get you where you want, the Child, Rewards, Activity,
+Streak and Schedule cards expose every size as a CSS custom property. Set one
+anywhere above the card - a Home Assistant theme, or a `card_mod` block on a
+single card - and it wins over the built-in value.
 
 ```yaml
 # In your theme, applying to every Choremander card at once
@@ -562,7 +622,23 @@ card_mod:
 | `--chm-streak-dot-size` / `--chm-streak-dot-gap` | `12px` / `5px` |
 | `--chm-streak-badge-size` / `--chm-streak-badge-padding` / `--chm-streak-badge-radius` | `66px` / `8px 6px` / `12px` |
 | `--chm-streak-badge-emoji-size` / `--chm-streak-badge-label-size` | `1.5rem` / `0.68rem` |
+| `--chm-streak-rest` | `var(--secondary-text-color, #757575)` - the day-off dot |
 | `--chm-color-orange` / `--chm-color-green` | the fire and today colours |
+
+</details>
+
+<details>
+<summary>Schedule Card properties</summary>
+
+| Property | Default |
+|---|---|
+| `--chm-header-padding` / `--chm-header-icon-size` | `16px 20px` / `28px` |
+| `--chm-schedule-grid-padding` / `--chm-schedule-grid-gap` | `12px 16px 4px` / `4px` |
+| `--chm-schedule-cell-min-height` / `--chm-schedule-cell-padding` | `40px` / `4px 2px` |
+| `--chm-schedule-day-head-font-size` / `--chm-schedule-chore-font-size` | `0.75rem` / `1rem` |
+| `--chm-schedule-initials-size` / `--chm-schedule-initials-font-size` | `22px` / `0.72rem` |
+| `--chm-schedule-add-padding` | `12px 16px 16px` |
+| `--chm-schedule-marker` / `--chm-schedule-today` | the swap and today colours |
 
 </details>
 
@@ -584,14 +660,32 @@ If you set "Family Movie Night" to cost 500 stars, how long does that take? A we
 
 You set **Days to Goal** (e.g., 14 days). Choremander does the math:
 
-1. Looks at each chore's **point value** and **expected completion rate**
+1. Looks at each chore's **point value**, **how often it comes round**, and **expected completion rate**
 2. Calculates how many points the child *should* earn per day
 3. Sets the reward cost so it takes exactly that many days
 
 ```
-Daily Expected Points = Sum of (Chore Points × Completion %)
+Daily Expected Points = Sum of (Chore Points × Days On ÷ 7 × Completion %)
 Reward Cost = Daily Expected Points × Days to Goal
 ```
+
+### The Frequency Factor
+
+`Days On` is how many days a week the chore is that child's - which is the whole
+reason a rota does not distort prices. Bins on Mondays are worth a seventh of
+bins every day. A chore two children take turns on gives each of them half its
+days. Without that factor a Mon/Wed/Fri chore was priced as though it happened
+every day, and every reward it fed into cost two to four times what it should
+have, silently.
+
+A chore with no Due Days falls every day, so the factor is exactly 1 and the
+price is the number Choremander has always calculated - which is every chore in
+every household that has not set a schedule.
+
+Choremander counts the days the child is actually named on the chore over the
+next four weeks rather than reading Due Days off the rule. Rotations and one-off
+swaps move days between children, and counting is the only reading that survives
+all of them.
 
 ### Why This Encourages Better Behavior
 
@@ -616,7 +710,8 @@ For big family goals (vacation, museum trip), enable **Jackpot** mode. All child
 ## Tips
 
 - **Two dashboards:** One for kids (Child + Rewards), one for parents (Approvals + Points)
-- **Completion %:** Set lower for optional/weekly chores so they don't inflate reward costs
+- **Weekly chores:** Give them Due Days rather than a low Completion % - the pricing already divides by how often a chore comes round, and doing both discounts it twice
+- **Completion %:** Only about the days a chore *is* due. Set it lower for the ones that realistically get skipped
 - **All data is local:** Nothing leaves your Home Assistant instance
 
 ---
@@ -654,7 +749,7 @@ Three dashboards are pre-configured in the sidebar:
 |---|---|
 | `/krishna` | Kid dashboard — chores, progress, rewards |
 | `/radha` | Kid dashboard |
-| `/parent` | Approvals, points management, chore reorder |
+| `/parent` | Approvals, points management, chore reorder - plus Activity, Streaks, Schedule and Misconfigured views along the top |
 
 #### Development Workflow
 
@@ -681,11 +776,30 @@ Run `make help` for the full list.
 #### Pre-configured Test Data
 
 The dev environment comes with:
-- **2 kids:** Krishna (25 stars) and Radha (15 stars)
-- **8 chores:**
-  - Shared: Make Bed, Brush Teeth (AM/PM), Tidy Room
+- **3 kids:** Krishna (25 stars), Radha (15 stars) and Meera (8 stars)
+- **11 chores:**
+  - Krishna and Radha: Make Bed, Brush Teeth (AM/PM), Tidy Room
   - Krishna only: Feed the Dog, Do Homework
   - Radha only: Water the Plants, Practice Piano
+  - Meera: Feed the Fish, Take Out the Bins, and Wash the Dishes with Krishna
+- **3 of those chores are on a schedule**, which is what the Schedule Card has to
+  draw:
+  - Feed the Fish falls Monday to Saturday, and is Meera's - so Meera has
+    **Sundays off**, which is what puts a "Day off 🎉" on her card and a muted
+    day-off dot on her streak strip
+  - Take Out the Bins falls on Mondays and Thursdays, also Meera's
+  - Wash the Dishes falls on Wednesdays and Saturdays with Krishna and Meera
+    taking turns - which lands Krishna on every Wednesday and Meera on every
+    Saturday, fixed there by the default counting-from date
+  - The other eight carry no rule at all, so they are on **every** day for
+    whoever they are assigned to. That is the reading the whole feature rests
+    on: no rule never means "off"
+
+The rules sit on chores nothing else asserts against, deliberately. The browser
+specs treat the everyday visibility of Water the Plants and Tidy Room as a
+fixture invariant, and scheduling those two made three of them fail on most
+weekdays - correctly, since the card is right to hide a chore that is not yours
+today.
 - **5 rewards:**
   - 30 Min Screen Time (dynamic pricing, 7 days) - shared
   - New Video Game (50 stars, fixed) - Krishna only
