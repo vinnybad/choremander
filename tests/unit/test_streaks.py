@@ -4,6 +4,12 @@
 table-driven tests over calendar arithmetic. That is the point of pulling it
 out: the awkward cases - a gap, a run that ended last month, the day after
 midnight - are the ones that used to need a running container to observe.
+
+The rest-day cases at the bottom are the reason this file grew. A child with
+nothing scheduled at the weekend used to lose their streak every Monday, and
+that bug is only observable at a specific calendar offset from a specific
+weekday - exactly the kind of thing that is miserable to reproduce by clicking
+around a dashboard and trivial to pin here.
 """
 
 from __future__ import annotations
@@ -14,7 +20,7 @@ import pytest
 
 from custom_components.choremander.streaks import compute_streaks, recent_active_days
 
-TODAY = date(2026, 8, 1)
+TODAY = date(2026, 8, 1)  # a Saturday, which the weekend-schedule cases rely on
 
 
 def days_ago(*offsets: int) -> list[date]:
@@ -147,6 +153,280 @@ def test_the_best_streak_is_never_less_than_the_current_one() -> None:
         active = days_ago(*range(start, start + 4))
         current, best = compute_streaks(active, TODAY)
         assert best >= current
+
+
+# ---------------------------------------------------------------------------
+# Rest days
+# ---------------------------------------------------------------------------
+
+
+def test_a_run_survives_a_scheduled_day_off_in_the_middle() -> None:
+    """A day the family asked for nothing must not read as a day the child failed.
+
+    This is the whole point of the parameter. Without it, any chore that is not
+    scheduled every single day guarantees a streak of at most the length of its
+    busiest stretch.
+    """
+    active = days_ago(0, 1, 3, 4)
+    current, best = compute_streaks(active, TODAY, rest_days=frozenset(days_ago(2)))
+    assert current == 4, "the day off is stepped over, not counted as a miss"
+    assert best == 4
+
+
+def test_a_rest_day_does_not_lengthen_the_streak_it_bridges() -> None:
+    """Neutral means neutral in both directions.
+
+    A rest day must not quietly award a day. Four active days either side of a
+    day off is a streak of four, not five - otherwise a family could inflate
+    every child's number by scheduling less work.
+    """
+    active = days_ago(0, 1, 3, 4)
+    current, _ = compute_streaks(active, TODAY, rest_days=frozenset(days_ago(2)))
+    assert current == 4, "four active days is a streak of four"
+
+
+def test_a_run_survives_several_consecutive_rest_days() -> None:
+    """A long holiday is still a holiday.
+
+    Nothing in the rule caps the number of days that may be skipped: what makes
+    a day skippable is that the schedule was empty, not how many neighbours
+    share that property.
+    """
+    active = days_ago(0, 1, 5, 6)
+    current, best = compute_streaks(active, TODAY, rest_days=frozenset(days_ago(2, 3, 4)))
+    assert current == 4
+    assert best == 4
+
+
+def test_a_scheduled_day_the_child_skipped_still_breaks_the_run() -> None:
+    """Rest days must not become a blanket amnesty.
+
+    If the gap contains even one day the child was expected to work, the run is
+    broken. A rule that forgave a miss because some *other* nearby day was a
+    rest day would make the streak meaningless.
+    """
+    active = days_ago(0, 1, 3, 4)
+    current, best = compute_streaks(active, TODAY, rest_days=frozenset(days_ago(6, 7)))
+    assert current == 2, "two days ago was a working day and it was missed"
+    assert best == 2
+
+
+def test_a_partly_rested_gap_still_breaks_the_run() -> None:
+    """One working day inside a gap is enough to break it.
+
+    The check is over every day in the gap, not a majority of them.
+    """
+    active = days_ago(0, 4)
+    current, best = compute_streaks(active, TODAY, rest_days=frozenset(days_ago(1, 2)))
+    assert current == 1, "three days ago was scheduled and missed"
+    assert best == 1
+
+
+def test_a_rest_day_today_does_not_break_a_run_that_reached_yesterday() -> None:
+    """Today was already forgiven; being a rest day must not make it worse.
+
+    The pre-schedule grace period and the rest-day rule overlap here, and the
+    two must compose rather than fight - an off day today is the *most* benign
+    day there is.
+    """
+    active = days_ago(1, 2, 3)
+    current, best = compute_streaks(active, TODAY, rest_days=frozenset(days_ago(0)))
+    assert current == 3
+    assert best == 3
+
+
+def test_a_run_that_ended_before_a_stretch_of_rest_days_is_still_live() -> None:
+    """The grace period extends backwards through rest days.
+
+    A run that ended two days ago is dead under the old rule. If both yesterday
+    and today were scheduled off, the child has not yet had a chance to
+    continue it, so it must still be live - this is the Monday-morning case in
+    miniature.
+    """
+    active = days_ago(2, 3, 4)
+    current, best = compute_streaks(active, TODAY, rest_days=frozenset(days_ago(0, 1)))
+    assert current == 3, "the child has not been asked to do anything since"
+    assert best == 3
+
+
+def test_a_weekday_only_schedule_survives_the_weekend() -> None:
+    """The bug this parameter exists to fix, at the exact offset it appears.
+
+    A child whose chores run Monday to Friday reaches Monday morning with their
+    last activity three calendar days behind them. Under the old rule that is a
+    dead run, every single week, forever.
+    """
+    monday = date(2026, 8, 3)
+    weekdays = [date(2026, 7, day) for day in (27, 28, 29, 30, 31)]
+    weekend = frozenset({date(2026, 8, 1), date(2026, 8, 2)})
+
+    current, best = compute_streaks(weekdays, monday, rest_days=weekend)
+    assert current == 5, "Friday's run is still live on Monday morning"
+    assert best == 5
+
+    assert compute_streaks(weekdays, monday) == (
+        0,
+        5,
+    ), "and this is what it used to do, which is the bug"
+
+
+def test_a_weekday_only_schedule_keeps_accumulating_week_after_week() -> None:
+    """The run has to grow across the weekend, not merely survive it.
+
+    Surviving would be enough to stop the number resetting; it would not be
+    enough for a child to ever see a streak longer than five.
+    """
+    monday = date(2026, 8, 3)
+    active = [date(2026, 7, day) for day in (27, 28, 29, 30, 31)] + [monday]
+    weekend = frozenset({date(2026, 7, 25), date(2026, 7, 26), date(2026, 8, 1), date(2026, 8, 2)})
+
+    assert compute_streaks(active, monday, rest_days=weekend) == (6, 6)
+
+
+def test_a_child_with_nothing_scheduled_at_all_gets_no_invented_streak() -> None:
+    """Every day being a rest day is a real configuration, not a bad input.
+
+    A child added to the household before anyone assigns them a chore has an
+    entirely empty schedule. That must produce zero, not a crash and not a
+    streak conjured out of a fortnight of neutral days.
+    """
+    every_day = frozenset(days_ago(*range(30)))
+    assert compute_streaks([], TODAY, rest_days=every_day) == (0, 0)
+
+
+def test_a_single_active_day_stays_live_through_an_empty_schedule() -> None:
+    """The mirror of the case above, and it is deliberate.
+
+    A child who did their one scheduled chore and has been asked for nothing
+    since has not missed anything, so the run is still live. It stays at one:
+    the rest days bridge it to today without adding to it.
+    """
+    rest = frozenset(days_ago(*range(10)))
+    current, best = compute_streaks(days_ago(10), TODAY, rest_days=rest)
+    assert current == 1
+    assert best == 1
+
+
+def test_a_bonus_chore_on_a_rest_day_counts_as_an_active_day() -> None:
+    """Working on a day off earns the day; it is not filtered out as noise.
+
+    An implementation that removed rest days from the active set before walking
+    would silently punish the keenest child in the family.
+    """
+    lone_day = days_ago(1)
+    current, best = compute_streaks(lone_day, TODAY, rest_days=frozenset(lone_day))
+    assert current == 1, "the day was active, whatever the schedule said"
+    assert best == 1
+
+
+def test_a_bonus_chore_on_a_rest_day_extends_the_run_it_sits_in() -> None:
+    """The same day counted once, as an active day, in the middle of a run."""
+    active = days_ago(0, 1, 2)
+    current, best = compute_streaks(active, TODAY, rest_days=frozenset(days_ago(1)))
+    assert current == 3, "not two - the rested day was worked, so it counts"
+    assert best == 3
+
+
+def test_the_best_streak_remembers_a_run_that_spanned_rest_days() -> None:
+    """Rest days apply to history, not only to the live run.
+
+    The best streak is walked with the same rule, so an old run that stepped
+    over a day off is remembered at its full length.
+    """
+    active = days_ago(16, 17, 19, 20) + days_ago(0)
+    current, best = compute_streaks(active, TODAY, rest_days=frozenset(days_ago(18)))
+    assert current == 1, "the old run is long dead"
+    assert best == 4, "but it was four days, not two and two"
+
+
+def test_an_ancient_active_day_is_not_bridged_by_a_small_rest_set() -> None:
+    """The short-circuit in the gap check must not change the answer.
+
+    A years-old completion is separated from today by far more days than the
+    rest set could ever contain, so the walk is skipped - but only because the
+    result is already known to be `False`.
+    """
+    active = [date(2020, 1, 1), *days_ago(0)]
+    current, best = compute_streaks(active, TODAY, rest_days=frozenset(days_ago(1, 2)))
+    assert current == 1
+    assert best == 1
+
+
+def test_rest_days_outside_the_history_change_nothing() -> None:
+    """Rest days are consulted, never enumerated.
+
+    The schedule will happily report rest days from before the child existed
+    and from next month. Neither may perturb the answer.
+    """
+    active = days_ago(0, 1, 2)
+    noise = frozenset([date(2019, 5, 5), TODAY + timedelta(days=3), TODAY - timedelta(days=400)])
+    assert compute_streaks(active, TODAY, rest_days=noise) == compute_streaks(active, TODAY)
+
+
+@pytest.mark.parametrize("container", [frozenset, set, list, tuple])
+def test_rest_days_may_be_any_collection(container: type) -> None:
+    """The caller derives these from a schedule and should not have to convert.
+
+    The coordinator builds this per child per refresh; forcing a particular
+    container type at the call site is the kind of friction that gets papered
+    over with a `list(...)` that allocates for nothing.
+    """
+    active = days_ago(0, 1, 3)
+    rest = container(days_ago(2))
+    assert compute_streaks(active, TODAY, rest_days=rest) == (3, 3)
+
+
+def test_the_best_streak_is_never_less_than_the_current_one_with_rest_days() -> None:
+    """The same property as before, re-checked now that two walks share a rule.
+
+    Both the best-streak walk and the current-streak walk go through the same
+    gap check, so they cannot disagree about what "consecutive" means. This
+    asserts it across a sliding window rather than trusting the reading.
+    """
+    rest = frozenset(days_ago(2, 5, 9))
+    for start in range(0, 12):
+        active = days_ago(*range(start, start + 4))
+        current, best = compute_streaks(active, TODAY, rest_days=rest)
+        assert best >= current
+
+
+# ---------------------------------------------------------------------------
+# Back-compatibility of the default
+# ---------------------------------------------------------------------------
+
+# Every expectation from the sections above, restated as data. Any change to
+# the walk that alters a pre-schedule answer has to break one of these.
+PRE_SCHEDULE_EXPECTATIONS = [
+    ([], (0, 0)),
+    (days_ago(0), (1, 1)),
+    (days_ago(0, 1, 2, 3, 4), (5, 5)),
+    (days_ago(0, 0, 0, 1, 1), (2, 2)),
+    (days_ago(1, 2, 3), (3, 3)),
+    (days_ago(2, 3, 4), (0, 3)),
+    (days_ago(0, 1) + days_ago(5, 6, 7, 8), (2, 4)),
+    (days_ago(0, 1, 2), (3, 3)),
+    (days_ago(2, 0, 4, 1, 3), (5, 5)),
+    ([TODAY + timedelta(days=1), TODAY + timedelta(days=2), *days_ago(0, 1)], (2, 2)),
+    ([TODAY + timedelta(days=3)], (0, 0)),
+    ([date(2020, 1, 1)], (0, 1)),
+]
+
+
+@pytest.mark.parametrize("active, expected", PRE_SCHEDULE_EXPECTATIONS)
+def test_omitting_rest_days_reproduces_the_pre_schedule_behaviour_exactly(
+    active: list[date], expected: tuple[int, int]
+) -> None:
+    """Adding the parameter must be invisible to every existing caller.
+
+    Streaks are already on screen in front of children. A refactor that shifted
+    a single number by one would be reported as a bug by a seven-year-old, and
+    correctly so. Passing no rest days, or an empty set in any container, must
+    give the answer this module gave before scheduling existed.
+    """
+    assert compute_streaks(active, TODAY) == expected, "the two-argument call"
+    for empty in (frozenset(), set(), [], ()):
+        assert compute_streaks(active, TODAY, empty) == expected, f"positional {empty!r}"
+        assert compute_streaks(active, TODAY, rest_days=empty) == expected, f"keyword {empty!r}"
 
 
 # ---------------------------------------------------------------------------
