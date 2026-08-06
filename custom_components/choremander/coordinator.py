@@ -1,9 +1,10 @@
 """Data coordinator for Choremander integration."""
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 import logging
-from typing import Any
+from typing import Any, Final
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -21,10 +22,19 @@ from .const import (
     MAX_REASON_LENGTH,
 )
 from .models import Child, Chore, ChoreCompletion, PointsTransaction, Reward, RewardClaim
+from .schedule import ChoreSchedule, assignees_on, prune_date_overrides
 from .storage import ChoremanderStorage
 from .streaks import compute_streaks, recent_active_days
 
 _LOGGER = logging.getLogger(__name__)
+
+# How far ahead pricing looks to work out how often a chore actually falls to a
+# child. Four whole weeks, so a week rotation between two children comes out at
+# exactly half rather than at whichever side of half the window happened to end
+# on. Looking *forward* rather than back is deliberate: a reward's price is a
+# promise about what the child can earn from now on, so a rotation that starts
+# next week, or a one-off swap a parent has already entered, has to count.
+PRICING_WINDOW_DAYS: Final = 28
 
 
 class ChoremanderCoordinator(DataUpdateCoordinator):
@@ -72,6 +82,64 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
             "streaks": streaks,
         }
 
+    # Schedule
+    #
+    # Everything about *when* a chore falls and *whose* turn it is lives in
+    # schedule.py. These two methods are the only bridge between it and the
+    # rest of the integration, and they stay deliberately thin: the sensor, the
+    # pricing loop and the streak rest-day set all come through here, which is
+    # what stops three slightly different answers to "is this chore on today?"
+    # from appearing.
+    def chore_assignees_on(
+        self, chore: Chore, day: date, household: list[str] | None = None
+    ) -> list[str]:
+        """Return the ids of the children on ``chore`` on ``day``.
+
+        The one thing this adds to ``schedule.assignees_on`` is the household
+        roster, which that module cannot know and deliberately does not want to:
+        a chore with an empty ``assigned_to`` means *anyone*, which is how this
+        product has always read it and what every card and the pricing loop
+        assume. Substituting the roster *before* resolving rather than patching
+        an empty result afterwards matters twice over - an empty result is also
+        how a genuine day off is expressed, and an unassigned chore that also
+        rotates should hand round the whole family rather than resolve to
+        nobody at all.
+
+        ``household`` is an optional pre-computed roster. Callers resolving many
+        days in a row should pass it; rebuilding every ``Child`` out of storage
+        once per chore per day is the difference between a cheap loop and a
+        noticeable one on a 28-day pricing window.
+        """
+        if household is None:
+            household = self._household_ids()
+        return assignees_on(self._chore_schedule(chore, household), day)
+
+    def chore_ids_for_child_on(self, child_id: str, day: date) -> list[str]:
+        """Return the ids of the chores ``child_id`` is on for ``day``.
+
+        The inverse question, answered by asking the forward one about every
+        chore rather than by a second implementation of the rules. Order follows
+        storage order, not the child's ``chore_order``; sorting for display is
+        the card's job and it already does it.
+        """
+        household = self._household_ids()
+        return [
+            chore.id
+            for chore in self.storage.get_chores()
+            if child_id in self.chore_assignees_on(chore, day, household)
+        ]
+
+    def _household_ids(self) -> list[str]:
+        """Every child id in the house, in roster order."""
+        return [child.id for child in self.storage.get_children()]
+
+    def _chore_schedule(self, chore: Chore, household: list[str]) -> ChoreSchedule:
+        """Lift a chore's schedule, standing the household in for 'anyone'."""
+        schedule = ChoreSchedule.from_chore(chore)
+        if schedule.assigned_to:
+            return schedule
+        return replace(schedule, assigned_to=list(household))
+
     # Streaks
     def _build_streak_summary(
         self,
@@ -90,6 +158,13 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         handling here - rejecting a completion deletes the record, so the day
         simply stops being active on the next refresh. That self-correction is
         the whole reason for deriving these figures instead of counting them.
+
+        A day the child had *nothing scheduled* is neither. Without that, the
+        moment a family puts a chore on Monday to Saturday every child loses
+        their streak every Sunday, and "I did everything you asked and still
+        lost my streak" is precisely the experience this product exists to
+        avoid. Those days go to ``compute_streaks`` as rest days, where they
+        neither extend a run nor break it.
         """
         today = dt_util.now().date()
 
@@ -100,16 +175,57 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
             local_day = dt_util.as_local(completion.completed_at).date()
             active_days.setdefault(completion.child_id, set()).add(local_day)
 
+        rest_days = self._rest_days(children, today)
+
         summary: dict[str, dict[str, Any]] = {}
         for child in children:
             days = active_days.get(child.id, set())
-            current, best = compute_streaks(days, today)
+            # A day off the child worked anyway is a day they worked. Leaving it
+            # in both sets would publish it to the card as a muted "day off" dot
+            # despite there being a completion behind it.
+            rest = rest_days.get(child.id, set()) - days
+            current, best = compute_streaks(days, today, rest_days=frozenset(rest))
             summary[child.id] = {
                 "current_streak": current,
                 "best_streak": best,
                 "active_days": recent_active_days(days, today, ACTIVE_DAYS_WINDOW),
+                "rest_days": sorted(day.isoformat() for day in rest),
             }
         return summary
+
+    def _rest_days(self, children: list[Child], today: date) -> dict[str, set[date]]:
+        """Find each child's scheduled days off inside the streak window.
+
+        Bounded to ``ACTIVE_DAYS_WINDOW`` - the same window the dot strip draws -
+        rather than to all of history. A run that reaches back further than the
+        strip is broken by any gap beyond it exactly as it was before schedules
+        existed, which is a bounded, explicable inaccuracy; walking a child's
+        whole history through the schedule engine on every thirty-second
+        refresh, to change a number nothing displays, is not worth it.
+
+        Resolved from the schedule as it stands *now*, so editing a rule
+        reshapes past rest days as well as future ones. That is the same bet
+        ``streaks.py`` and ``schedule.py`` both take deliberately: snapshotting
+        a roster per day would reintroduce exactly the drift those modules exist
+        to prevent.
+        """
+        window = [today - timedelta(days=offset) for offset in range(ACTIVE_DAYS_WINDOW)]
+        household = self._household_ids()
+
+        scheduled: dict[str, set[date]] = {}
+        for chore in self.storage.get_chores():
+            # Resolved once per chore per day and then read for every child,
+            # rather than once per child, so the cost of this is independent of
+            # the size of the family.
+            schedule = self._chore_schedule(chore, household)
+            for day in window:
+                for child_id in assignees_on(schedule, day):
+                    scheduled.setdefault(child_id, set()).add(day)
+
+        return {
+            child.id: {day for day in window if day not in scheduled.get(child.id, set())}
+            for child in children
+        }
 
     def _apply_streak(
         self, child: Child, streaks: dict[str, dict[str, Any]] | None = None
@@ -275,6 +391,66 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
         await self.storage.async_save()
         await self.async_refresh()
 
+    async def async_set_chore_schedule(
+        self,
+        chore_id: str,
+        due_days: list[str] | None = None,
+        rotation: str | None = None,
+        rotation_order: list[str] | None = None,
+        rotation_anchor: str | None = None,
+        day_overrides: dict[str, list[str]] | None = None,
+        date_overrides: dict[str, list[str]] | None = None,
+    ) -> Chore:
+        """Write the scheduling rule for one chore.
+
+        Every field is optional and ``None`` means *leave it alone*, which is
+        not the same as clearing it: the schedule card edits one row of the grid
+        at a time and a call that only moves Saturday must not silently reset a
+        rotation the parent set last week. Clearing is asking for it explicitly
+        with ``[]`` or ``{}``.
+
+        Separate from ``async_update_chore`` rather than folded into it because
+        the two have different writers. The options flow rebuilds a whole chore
+        from a form that has no schedule fields on it, so letting it write the
+        chore wholesale is exactly how a rotation gets wiped by someone editing
+        the points.
+
+        Nothing here validates: an unknown rotation mode, a weekday that is not
+        a weekday and a child id that has since left the family are all stored
+        as sent, and ``schedule.py`` degrades gracefully on every one of them.
+        Rejecting them would put a second, quietly different set of rules in
+        front of the one that actually decides who does the dishes.
+        """
+        chore = self.get_chore(chore_id)
+        if not chore:
+            raise ValueError(f"Chore {chore_id} not found")
+
+        if due_days is not None:
+            chore.due_days = list(due_days)
+        if rotation is not None:
+            chore.rotation = rotation
+        if rotation_order is not None:
+            chore.rotation_order = list(rotation_order)
+        if rotation_anchor is not None:
+            chore.rotation_anchor = rotation_anchor
+        if day_overrides is not None:
+            chore.day_overrides = dict(day_overrides)
+
+        # Pruned on every call, not only when overrides were supplied. A family
+        # that swaps one Saturday a week accumulates one dead key a week
+        # forever, and the write path is the only place that can actually shrink
+        # the stored blob - pruning on read would hide the growth while letting
+        # it continue.
+        chore.date_overrides = prune_date_overrides(
+            chore.date_overrides if date_overrides is None else date_overrides,
+            dt_util.now().date(),
+        )
+
+        self.storage.update_chore(chore)
+        await self.storage.async_save()
+        await self.async_refresh()
+        return chore
+
     async def async_remove_chore(self, chore_id: str) -> None:
         """Remove a chore."""
         self.storage.remove_chore(chore_id)
@@ -349,32 +525,11 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
             return result
 
         # Calculate daily expected points for each child
-        child_daily_points: dict[str, float] = {}
-
+        child_daily_points = self._daily_expected_points(assigned_children, all_chores)
         for child in assigned_children:
-            daily_points = 0.0
-            chores_counted = 0
-
-            for chore in all_chores:
-                # Check if this chore is assigned to this child
-                # Empty assigned_to means all children can do it
-                if chore.assigned_to and child.id not in chore.assigned_to:
-                    continue
-
-                chores_counted += 1
-                # Get the completion percentage per month (default to 100% if not set)
-                # completion_percentage_per_month: 100 = daily, 50 = every other day, etc.
-                completion_pct = chore.completion_percentage_per_month
-
-                # Calculate daily expected points for this chore
-                # Formula: points * (completion_percentage / 100)
-                daily_expected = chore.points * (completion_pct / 100)
-                daily_points += daily_expected
-
-            child_daily_points[child.id] = daily_points
             _LOGGER.debug(
-                "CALC_COSTS: child=%s, chores_counted=%d, daily_points=%.2f",
-                child.name, chores_counted, daily_points
+                "CALC_COSTS: child=%s, daily_points=%.2f",
+                child.name, child_daily_points.get(child.id, 0.0)
             )
 
         # Calculate costs based on whether this is a jackpot reward
@@ -412,11 +567,11 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
     def get_child_daily_points(self, reward: Reward) -> dict[str, float]:
         """Get the daily expected points for each child assigned to a reward.
 
-        This is used to calculate weighted contributions for jackpot rewards.
-        Returns a dict mapping child_id to their daily expected points.
+        This is what the jackpot meter draws its per-child contributions from,
+        so it goes through the same ``_daily_expected_points`` the price does. A
+        meter that filled at a different rate than the goal it was filling
+        towards would be a bug the arithmetic could never be talked out of.
         """
-        result: dict[str, float] = {}
-
         all_children = self.storage.get_children()
         all_chores = self.storage.get_chores()
 
@@ -427,23 +582,71 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
             assigned_children = all_children
 
         if not assigned_children or not all_chores:
-            return result
+            return {}
 
-        for child in assigned_children:
-            daily_points = 0.0
+        return self._daily_expected_points(assigned_children, all_chores)
 
-            for chore in all_chores:
-                # Check if this chore is assigned to this child
-                if chore.assigned_to and child.id not in chore.assigned_to:
+    def _daily_expected_points(
+        self, children: list[Child], chores: list[Chore]
+    ) -> dict[str, float]:
+        """Return what each child is expected to earn per day, on average.
+
+        The one number every dynamic price is built out of::
+
+            points x (scheduled_days_per_week / 7) x (completion_pct / 100)
+
+        The middle factor is what scheduling added. Without it a parent who puts
+        the bins out on Mondays gets a reward priced as though the bins went out
+        every day, the goal quietly moves seven times further away, and nothing
+        anywhere says why. That is the trap this whole calculation exists to
+        avoid, and it is silent, which is what makes it dangerous.
+
+        A chore with no schedule falls on every one of the window's days, so the
+        factor is exactly ``1.0`` and the result is bit-for-bit the number this
+        function returned before schedules existed - the property the pricing
+        tests pin explicitly, because every installed household is in that case.
+
+        The frequency is measured rather than read off ``due_days``: a rotation
+        splits a chore's days between children, an override adds or removes one,
+        and counting the days the child is actually named is the only reading
+        that survives all of them. It counts resolved days over
+        ``PRICING_WINDOW_DAYS`` and divides, so ``days_on / 28`` *is*
+        ``days_per_week / 7`` with no separate weekly bookkeeping.
+
+        Never divides by anything but that constant, so a chore that falls on
+        nobody contributes nothing rather than raising.
+        """
+        today = dt_util.now().date()
+        household = self._household_ids()
+        window = [today + timedelta(days=offset) for offset in range(PRICING_WINDOW_DAYS)]
+
+        rates: dict[str, float] = {child.id: 0.0 for child in children}
+        for chore in chores:
+            # Resolved once per chore per day and then read for every child.
+            # This runs for every reward on every sensor rebuild, and doing it
+            # per child instead would multiply that by the size of the family
+            # for an identical answer.
+            schedule = self._chore_schedule(chore, household)
+            days_on: dict[str, int] = {}
+            for day in window:
+                # Deduplicated: an override or rotation order that names the
+                # same child twice is one day on the chore, not two, and an
+                # undeduplicated count could push the factor above 1.0.
+                for child_id in set(assignees_on(schedule, day)):
+                    days_on[child_id] = days_on.get(child_id, 0) + 1
+
+            completion_pct = chore.completion_percentage_per_month
+            for child_id in rates:
+                scheduled = days_on.get(child_id, 0)
+                if not scheduled:
+                    # Not this child's chore, or not on in the next four weeks.
+                    # Skipping rather than adding zero keeps the float sum
+                    # identical to the pre-scheduling one.
                     continue
+                frequency = scheduled / PRICING_WINDOW_DAYS
+                rates[child_id] += chore.points * frequency * (completion_pct / 100)
 
-                completion_pct = chore.completion_percentage_per_month
-                daily_expected = chore.points * (completion_pct / 100)
-                daily_points += daily_expected
-
-            result[child.id] = daily_points
-
-        return result
+        return rates
 
     def calculate_dynamic_reward_cost(self, reward: Reward, child_id: str | None = None) -> int:
         """Calculate the dynamic cost of a reward.
