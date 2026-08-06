@@ -5,7 +5,9 @@
  *
  * Streaks come from the integration, which derives them from the approved
  * completion history. The dot strip is drawn from the same source, so the
- * number and the dots can never tell different stories.
+ * number and the dots can never tell different stories. A day the child had
+ * nothing scheduled is part of that promise: the count already steps over it
+ * without breaking, so the strip draws it as a day off rather than a gap.
  *
  * Version: 0.0.1 - Initial release
  * Last Updated: 2026-08-01
@@ -79,6 +81,11 @@ class ChoremanderStreakCard extends LitElement {
         --chm-streak-fire-text: var(--chm-color-orange-text, #c9431a);
         --chm-streak-today: var(--chm-color-green, #2ecc71);
         --chm-streak-idle: var(--divider-color, #e0e0e0);
+        /* Deliberately a text colour rather than a third dot colour: it is the
+           one neutral a theme guarantees is legible against the card in both
+           light and dark, and the day-off dot is drawn as an outline where a
+           divider-weight grey would disappear. */
+        --chm-streak-rest: var(--secondary-text-color, #757575);
         --text-primary: var(--primary-text-color, #212121);
         --text-secondary: var(--secondary-text-color, #757575);
         --divider: var(--divider-color, #e0e0e0);
@@ -256,6 +263,23 @@ class ChoremanderStreakCard extends LitElement {
       .dot.today-idle {
         background: transparent;
         border: 2px solid var(--chm-streak-today);
+      }
+
+      /* A day with nothing scheduled is not a miss, and the streak count beside
+         the strip already agrees. Hollow rather than a third fill: two greys at
+         12px are told apart by brightness alone, which is exactly the cue a
+         dimmed screen, a cheap wall tablet or low vision takes away first. */
+      .dot.rest {
+        background: transparent;
+        border: 2px solid var(--chm-streak-rest);
+      }
+
+      /* Today with nothing on it still has to be findable as today, but the
+         green ring above would promise there is something left to do. The halo
+         marks the day; the colour keeps saying "off". */
+      .dot.rest.today-rest {
+        box-shadow: 0 0 0 2px var(--card-background-color, #fff),
+          0 0 0 4px var(--chm-streak-rest);
       }
 
       /* ---------------------------------------------------- achievements */
@@ -710,27 +734,46 @@ class ChoremanderStreakCard extends LitElement {
 
   _renderDots(child) {
     const active = new Set(child.active_days || []);
+    // A completion outranks the schedule it was not asked for. The integration
+    // already keeps worked days out of `rest_days`, but a child who did a chore
+    // on their day off should never be shown as having had nothing to do, and
+    // that is too important to rest on an agreement between two components.
+    //
+    // Absent or empty is the normal state - it is what every household that has
+    // never set a schedule publishes - and it has to draw exactly as it did
+    // before rest days existed, so nothing below can fire on an empty set.
+    const rest = new Set((child.rest_days || []).filter((day) => !active.has(day)));
     const days = this._dayWindow(this.config.streak_days);
     const todayKey = days[days.length - 1];
 
     return html`
-      <div class="dots" role="img" aria-label="${this._dotsLabel(child, days, active)}">
+      <div class="dots" role="img" aria-label="${this._dotsLabel(child, days, active, rest)}">
         ${days.map((day) => {
           const isToday = day === todayKey;
           const isActive = active.has(day);
+          const isRest = rest.has(day);
           let cls = "dot";
           if (isToday && isActive) cls += " today";
+          else if (isToday && isRest) cls += " rest today-rest";
           else if (isToday) cls += " today-idle";
           else if (isActive) cls += " active";
-          return html`<div class="${cls}" title="${day}"></div>`;
+          else if (isRest) cls += " rest";
+          return html`<div
+            class="${cls}"
+            title="${isRest ? `${day} — day off, nothing was scheduled` : day}"
+          ></div>`;
         })}
       </div>
     `;
   }
 
-  _dotsLabel(child, days, active) {
+  _dotsLabel(child, days, active, rest) {
     const count = days.filter((day) => active.has(day)).length;
-    return `${child.name || "This child"} was active on ${count} of the last ${days.length} days`;
+    const label = `${child.name || "This child"} was active on ${count} of the last ${days.length} days`;
+    // Said only when there is something to say, so a household with no schedule
+    // hears the sentence it has always heard.
+    const off = days.filter((day) => rest.has(day)).length;
+    return off ? `${label}, with ${off} day${off === 1 ? "" : "s"} off` : label;
   }
 
   _renderEmpty() {
