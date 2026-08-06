@@ -37,6 +37,7 @@ from custom_components.choremander.schedule import (
     ROTATION_WEEK,
     ChoreSchedule,
     assignees_on,
+    is_scheduled,
     prune_date_overrides,
     week_start,
     weekday_name,
@@ -1108,3 +1109,88 @@ def test_week_start_returns_the_monday_of_the_week_containing_a_day() -> None:
 
 def test_week_start_crosses_a_month_boundary_without_help() -> None:
     assert week_start(date(2026, 1, 1)) == date(2025, 12, 29)
+
+
+# ---------------------------------------------------------------------------
+# Which chores the schedule sensor has to carry
+# ---------------------------------------------------------------------------
+#
+# `is_scheduled` is what keeps the companion sensor inside the recorder's 16KiB
+# attribute limit. Publishing a resolved roster for every chore on every day of
+# a fortnight measures 23,589 bytes for the five-child, twenty-five-chore
+# household in `test_sensor_payload_size.py` - 144% of a ceiling that silently
+# drops the state from history. A chore with no schedule resolves to the same
+# `assigned_to` on all fourteen days, so those fourteen entries are pure
+# repetition, and every chore in every install today is in that case.
+
+
+def test_a_chore_with_no_scheduling_at_all_is_not_scheduled() -> None:
+    """The whole installed base, and the reason the payload fits."""
+    assert is_scheduled(ChoreSchedule()) is False
+    assert is_scheduled(ChoreSchedule(assigned_to=[KRISHNA, MAYA])) is False, (
+        "who a chore is assigned to is not a schedule - it resolves to the same "
+        "answer on every day, which is what the card already does without help"
+    )
+
+
+def test_an_empty_due_days_list_does_not_make_a_chore_scheduled() -> None:
+    """`[]` means every day, so it is the absence of a rule, not a rule."""
+    assert is_scheduled(ChoreSchedule(due_days=[], assigned_to=[KRISHNA])) is False
+
+
+def test_each_kind_of_rule_on_its_own_makes_a_chore_scheduled() -> None:
+    """Any one of the four is enough; they are not required together."""
+    assert is_scheduled(ChoreSchedule(due_days=["monday"])) is True
+    assert is_scheduled(ChoreSchedule(rotation=ROTATION_OCCURRENCE)) is True
+    assert is_scheduled(ChoreSchedule(rotation=ROTATION_WEEK)) is True
+    assert is_scheduled(ChoreSchedule(day_overrides={"sunday": []})) is True, (
+        "an override to nobody is still a rule - it is how a parent says 'not "
+        "on Sundays' without touching the due days"
+    )
+    assert is_scheduled(ChoreSchedule(date_overrides={"2026-08-08": [MAYA]})) is True
+
+
+def test_a_rotation_order_without_a_rotation_mode_is_not_a_schedule() -> None:
+    """Leftover state must not drag a chore into the payload.
+
+    Switching a rotation back to "none" through the card leaves the order and
+    anchor behind, and `assignees_on` ignores both. A chore that resolves the
+    pre-scheduling way on every day belongs out of the payload however much
+    inert data it carries.
+    """
+    inert = ChoreSchedule(
+        rotation=ROTATION_NONE,
+        rotation_order=[KRISHNA, MAYA],
+        rotation_anchor="2026-08-03",
+        assigned_to=[KRISHNA],
+    )
+
+    assert is_scheduled(inert) is False
+    assert [assignees_on(inert, day) for day in WEEK] == [[KRISHNA]] * 7, (
+        "and the reason it is safe to omit is that it really does resolve to "
+        "the plain assigned_to on every day"
+    )
+
+
+def test_an_unrecognised_rotation_mode_is_not_treated_as_a_schedule() -> None:
+    """`assignees_on` degrades an unknown cadence to the pre-scheduling answer.
+
+    Both readings have to agree. Calling it scheduled here while resolving it
+    as unscheduled there would publish fourteen days of rows saying exactly
+    what leaving the chore out already says.
+    """
+    typo = ChoreSchedule(rotation="ocurrence", assigned_to=[KRISHNA])
+
+    assert is_scheduled(typo) is False
+    assert assignees_on(typo, MONDAY) == [KRISHNA]
+
+
+def test_garbage_in_the_schedule_fields_does_not_count_as_a_schedule() -> None:
+    """The same rows `assignees_on` is built to survive reach this too."""
+    assert is_scheduled(ChoreSchedule(due_days="monday")) is False, (
+        "a bare string is not a list of due days; treating it as one would put "
+        "the chore in the payload resolving to nobody on every single day"
+    )
+    assert is_scheduled(ChoreSchedule(day_overrides=[])) is False
+    assert is_scheduled(ChoreSchedule(date_overrides="tomorrow")) is False
+    assert is_scheduled(ChoreSchedule(rotation=None)) is False

@@ -20,9 +20,16 @@ from .const import (
     EVENT_REWARD_CLAIMED,
     EVENT_REWARD_REFUNDED,
     MAX_REASON_LENGTH,
+    SCHEDULE_WINDOW_DAYS,
 )
 from .models import Child, Chore, ChoreCompletion, PointsTransaction, Reward, RewardClaim
-from .schedule import ChoreSchedule, assignees_on, prune_date_overrides
+from .schedule import (
+    ChoreSchedule,
+    assignees_on,
+    is_scheduled,
+    prune_date_overrides,
+    week_start,
+)
 from .storage import ChoremanderStorage
 from .streaks import compute_streaks, recent_active_days
 
@@ -128,6 +135,69 @@ class ChoremanderCoordinator(DataUpdateCoordinator):
             for chore in self.storage.get_chores()
             if child_id in self.chore_assignees_on(chore, day, household)
         ]
+
+    def schedule_window(self, today: date | None = None) -> dict[str, Any]:
+        """Resolve the whole published schedule window, ready for a card to read.
+
+        Resolving server-side is the point. There is one implementation of
+        "whose turn is it on this date", in ``schedule.py``, and this is how it
+        reaches the frontend; a card that did the rotation arithmetic itself
+        would be a second implementation to keep in step, in a language with a
+        different idea of what a date is.
+
+        The payload is indexed rather than spelled out::
+
+            {"window_start": "2026-08-03", "window_days": 14,
+             "children": ["child_krishna", "child_maya"],
+             "chores": ["chore_dishes"],
+             "days": [{"0": [0]}, {"0": [1]}, ...]}
+
+        ``days`` is positional - entry N is ``window_start`` plus N days - and
+        each key indexes ``chores`` while each value indexes ``children``. That
+        is not premature compression. The recorder silently stops storing any
+        state whose attributes exceed 16KiB, and spelling every id out across a
+        fortnight measures 33,165 bytes for the household in
+        ``test_sensor_payload_size.py``; indexing brings the same worst case to
+        6,465, which leaves the margin that file insists on.
+
+        Two things are left out, both because they are things the card already
+        knows. A chore with no rule at all is omitted entirely - it resolves to
+        the same ``assigned_to`` on all fourteen days, and the card reads a
+        missing chore exactly as it reads a missing sensor, which is how it
+        behaved before schedules existed. A chore nobody is on for a given day
+        is omitted from that day rather than carried as an empty list.
+        """
+        start = week_start(today or dt_util.now().date())
+        household = self._household_ids()
+        roster = {child_id: index for index, child_id in enumerate(household)}
+
+        scheduled = [
+            (chore, self._chore_schedule(chore, household))
+            for chore in self.storage.get_chores()
+            if is_scheduled(ChoreSchedule.from_chore(chore))
+        ]
+
+        days: list[dict[str, list[int]]] = []
+        for offset in range(SCHEDULE_WINDOW_DAYS):
+            day = start + timedelta(days=offset)
+            entry: dict[str, list[int]] = {}
+            for index, (_chore, schedule) in enumerate(scheduled):
+                # Unknown ids are dropped rather than appended to the roster: a
+                # chore can still name a child who has left the household, and
+                # an index that addresses no row of `children` is worse in a
+                # card than a chore that quietly has one fewer name on it.
+                on = [roster[child_id] for child_id in assignees_on(schedule, day) if child_id in roster]
+                if on:
+                    entry[str(index)] = on
+            days.append(entry)
+
+        return {
+            "window_start": start.isoformat(),
+            "window_days": SCHEDULE_WINDOW_DAYS,
+            "children": household,
+            "chores": [chore.id for chore, _schedule in scheduled],
+            "days": days,
+        }
 
     def _household_ids(self) -> list[str]:
         """Every child id in the house, in roster order."""

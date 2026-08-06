@@ -274,3 +274,11 @@ ACTIVITY_FEED_LIMIT: Final = 40
 
 # How many days of per-child activity the streak card's dot strip can draw.
 ACTIVE_DAYS_WINDOW: Final = 30
+
+# How far the resolved schedule sensor publishes. Two whole weeks, aligned to
+# Monday: "this week and next" covers every edit a parent actually makes - a
+# recurring "every Saturday" rule and a one-off swap are almost always in one
+# of the two - without paging, and it keeps the payload small enough that the
+# recorder's 16KiB attribute ceiling is never in question. The cost is that an
+# override cannot be set a month ahead.
+SCHEDULE_WINDOW_DAYS: Final = 14

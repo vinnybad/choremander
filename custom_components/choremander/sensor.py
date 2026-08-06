@@ -49,9 +49,10 @@ async def async_setup_entry(
     # Add pending approvals sensor
     entities.append(PendingApprovalsSensor(coordinator, entry))
 
-    # Add activity feed and streak sensors
+    # Add activity feed, streak and schedule sensors
     entities.append(ActivitySensor(coordinator, entry))
     entities.append(StreaksSensor(coordinator, entry))
+    entities.append(ScheduleSensor(coordinator, entry))
 
     async_add_entities(entities)
 
@@ -497,6 +498,56 @@ class ActivitySensor(ChoremandorBaseSensor):
                 for c in data.get("children", [])
             ],
         }
+
+
+class ScheduleSensor(ChoremandorBaseSensor):
+    """Sensor carrying the resolved schedule for this week and next.
+
+    A companion entity for the same reason `ActivitySensor` is one: the
+    overview payload has essentially no headroom left, and this data grows with
+    chores x days. Keeping it here means the two budgets stay independent.
+
+    What it publishes is *resolved* - real dates with real child ids, not the
+    rules that produced them. The rotation arithmetic lives in `schedule.py`
+    and runs once, here, rather than being reimplemented in every card that
+    wants to know whose turn it is. See `ChoremanderCoordinator.schedule_window`
+    for the shape and for why it is indexed.
+    """
+
+    def __init__(
+        self,
+        coordinator: ChoremandorCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_schedule"
+        self._attr_name = "Choremander Schedule"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int:
+        """Return how many chores currently carry a schedule.
+
+        Zero for every household that has not set one up, which makes the state
+        a usable answer to "is anything scheduled?" without reading attributes.
+        """
+        return len(self.coordinator.schedule_window()["chores"])
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        """Return the unit of measurement."""
+        return "chores"
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:calendar-week"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return additional attributes."""
+        return self.coordinator.schedule_window()
 
 
 class StreaksSensor(ChoremandorBaseSensor):

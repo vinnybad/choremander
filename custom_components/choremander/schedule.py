@@ -217,6 +217,36 @@ def assignees_on(schedule: ChoreSchedule, day: date) -> list[str]:
     return [order[ordinal % len(order)]]
 
 
+def is_scheduled(schedule: ChoreSchedule) -> bool:
+    """Return whether this chore's answer can change from one day to the next.
+
+    The companion sensor publishes a resolved roster per chore per day, and the
+    recorder drops any state whose attributes exceed 16KiB. Resolving all
+    twenty-five chores of the stress household across a fortnight measures
+    23,589 bytes - 144% of that ceiling - and almost all of it is repetition,
+    because a chore with no rule resolves to the same ``assigned_to`` on every
+    one of the fourteen days. Those chores are left out of the payload
+    entirely, and the card reads a missing chore the same way it reads a
+    missing sensor: exactly as it behaved before schedules existed. That is
+    also what keeps the fallback path honest, since every install exercises it
+    on every chore rather than only in the rare case of an entity that has not
+    loaded.
+
+    The predicate is deliberately the exact complement of what ``assignees_on``
+    ignores. Anything that function degrades to the pre-scheduling answer - an
+    empty ``due_days``, an unknown cadence, a rotation order with the mode
+    switched back to ``none``, a field of the wrong type - reads as unscheduled
+    here, so the two can never disagree about a chore and publish fourteen rows
+    that say nothing.
+    """
+    if _day_names(schedule.due_days):
+        return True
+    if _as_mapping(schedule.day_overrides) or _as_mapping(schedule.date_overrides):
+        return True
+    rotation = schedule.rotation if isinstance(schedule.rotation, str) else ROTATION_NONE
+    return rotation in (ROTATION_OCCURRENCE, ROTATION_WEEK)
+
+
 def prune_date_overrides(
     date_overrides: Any,
     today: date,

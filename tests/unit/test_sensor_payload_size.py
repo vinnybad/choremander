@@ -52,6 +52,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.choremander.const import (
     ACTIVE_DAYS_WINDOW,
     ACTIVITY_FEED_LIMIT,
+    DAYS_OF_WEEK,
     DOMAIN,
     EVENT_CHORE_APPROVED,
     EVENT_CHORE_REJECTED,
@@ -59,6 +60,7 @@ from custom_components.choremander.const import (
     EVENT_POINTS_REMOVED,
     EVENT_REWARD_CLAIMED,
     EVENT_REWARD_REFUNDED,
+    SCHEDULE_WINDOW_DAYS,
 )
 
 # The recorder drops any state whose attributes exceed this. It is a database
@@ -237,6 +239,14 @@ def _stress_household(local_now: datetime) -> dict[str, Any]:
                 "daily_limit": 1,
                 "completion_sound": "coin",
                 "completion_percentage_per_month": 100,
+                # Every chore carries a schedule, and the one it carries is the
+                # most expensive kind: due every day, so it resolves to a row on
+                # all 14 days of the window for all 5 children rather than
+                # thinning out on the days it is not due. `ScheduleSensor` omits
+                # unscheduled chores entirely - which is every chore in every
+                # install today - so without this the sensor would publish an
+                # empty payload here and the guard below would measure nothing.
+                "due_days": list(DAYS_OF_WEEK),
             }
         )
 
@@ -479,6 +489,27 @@ async def test_the_stress_household_actually_exercises_every_growth_dimension(
     assert len(pending["chore_completions"]) == CHILD_COUNT * PENDING_PER_CHILD
     assert pending["reward_claims"], "some reward claims must be awaiting approval too"
 
+    # The schedule sensor is the one guard here that measures nothing by
+    # default: it omits every chore without a rule, which is every chore in
+    # every install today. The household deliberately schedules all of them,
+    # due every day, so what is measured below is the worst case rather than
+    # the empty payload a realistic seed would produce.
+    schedule = hass.states.get("sensor.choremander_schedule").attributes
+    assert len(schedule["chores"]) == CHORE_COUNT, (
+        "every chore must carry a schedule, or the payload measured below is "
+        f"smaller than the worst case; got {len(schedule['chores'])} of {CHORE_COUNT}"
+    )
+    assert len(schedule["days"]) == SCHEDULE_WINDOW_DAYS
+    assert all(len(day) == CHORE_COUNT for day in schedule["days"]), (
+        "and every chore must resolve to somebody on every day of the window - "
+        "a chore that thins out on its off days costs fewer bytes than one that "
+        "does not, and this guard has to measure the expensive shape"
+    )
+    assert any(len(on) == CHILD_COUNT for on in schedule["days"][0].values()), (
+        "at least one chore must name the whole household on a day, which is the "
+        "widest a single entry gets"
+    )
+
 
 # ---------------------------------------------------------------------------
 # The hard limit
@@ -687,7 +718,7 @@ async def test_the_measured_sizes_are_reported_for_every_sensor(
     assert all(size > 0 for size in sizes.values()), (
         "a sensor publishing zero bytes of attributes would make this whole guard vacuous"
     )
-    assert len(sizes) == 4 + 2 * CHILD_COUNT, (
-        "the household should yield overview, pending-approvals, activity and "
-        f"streaks sensors plus two per child; got {sorted(sizes)}"
+    assert len(sizes) == 5 + 2 * CHILD_COUNT, (
+        "the household should yield overview, pending-approvals, activity, "
+        f"streaks and schedule sensors plus two per child; got {sorted(sizes)}"
     )
