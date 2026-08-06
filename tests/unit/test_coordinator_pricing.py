@@ -22,6 +22,7 @@ import pytest
 
 from custom_components.choremander.coordinator import ChoremanderCoordinator
 from custom_components.choremander.models import Child, Chore, Reward
+from custom_components.choremander.schedule import DAY_NAMES
 
 COORDINATOR_LOGGER = "custom_components.choremander.coordinator"
 
@@ -82,13 +83,26 @@ def chore(
     percentage: int = 100,
     chore_id: str = "chore_x",
     name: str = "Chore",
+    due_days: list[str] | None = None,
+    rotation: str = "none",
+    rotation_order: list[str] | None = None,
+    day_overrides: dict[str, list[str]] | None = None,
 ) -> Chore:
-    """A chore with only the two fields the pricing math reads."""
+    """A chore carrying the fields the pricing math reads.
+
+    Every scheduling argument defaults to the value a chore stored before
+    schedules existed loads with, so the builder keeps producing the
+    always-on chore the tests above this section were written against.
+    """
     return Chore(
         name=name,
         points=points,
         assigned_to=assigned_to or [],
         completion_percentage_per_month=percentage,
+        due_days=due_days or [],
+        rotation=rotation,
+        rotation_order=rotation_order or [],
+        day_overrides=day_overrides or {},
         id=chore_id,
     )
 
@@ -452,6 +466,190 @@ def test_a_child_who_earns_nothing_falls_back_to_the_manual_cost_only_when_not_a
     assert jackpot == {"A": 100, "B": 100}, (
         "A jackpot pools the household's 10 pts/day, so B never reaches the 999 "
         f"fallback and pays the same 100 as A. Got {jackpot}"
+    )
+
+
+# --------------------------------------------------------------------------
+# Scheduling - how often a chore actually comes round
+# --------------------------------------------------------------------------
+#
+# `_daily_expected_points` multiplies by `scheduled_days_per_week / 7`,
+# measured by resolving `PRICING_WINDOW_DAYS` (28) days ahead and counting the
+# days each child is named. Twenty-eight days contains exactly four of every
+# weekday whatever today is, so a chore due on one weekday is 4/28 of a daily
+# one and none of these tests depend on the date they run on.
+
+
+def test_an_unscheduled_chore_prices_exactly_as_it_did_before_scheduling(
+    make_pricing_coordinator,
+) -> None:
+    """The property every installed household depends on.
+
+    A chore with no `due_days` falls on all 28 days of the window, so the
+    frequency factor is exactly 1.0 and the arithmetic reduces to the
+    `points x (completion_pct / 100)` this function computed before schedules
+    existed. Asserted explicitly rather than left implied by the tests above,
+    because it is the whole reason this feature could ship without a migration.
+    """
+    coordinator = make_pricing_coordinator(
+        children=[child("A")],
+        chores=[chore(10, percentage=100)],
+    )
+
+    assert coordinator.get_child_daily_points(reward()) == {"A": 10.0}, (
+        "10 points at 100% with no schedule must still be 10.0 pts/day - a "
+        "frequency factor of anything but 1.0 here would reprice every reward "
+        "in every existing install on upgrade"
+    )
+    assert coordinator.calculate_dynamic_reward_costs(reward(days_to_goal=10)) == {"A": 100}, (
+        "and 10 days of it must still cost 100"
+    )
+
+
+def test_listing_all_seven_due_days_prices_the_same_as_listing_none(
+    make_pricing_coordinator,
+) -> None:
+    """The two ways of saying "every day" must not disagree.
+
+    An empty `due_days` means every day for back-compat; spelling the seven out
+    is what a parent gets if they tick every box in the form. They are the same
+    schedule and must be the same price.
+    """
+    every_day = make_pricing_coordinator(
+        children=[child("A")],
+        chores=[chore(10, due_days=list(DAY_NAMES))],
+    )
+    unscheduled = make_pricing_coordinator(children=[child("A")], chores=[chore(10)])
+
+    assert (
+        every_day.get_child_daily_points(reward())
+        == unscheduled.get_child_daily_points(reward())
+        == {"A": 10.0}
+    ), "ticking all seven days must price identically to ticking none"
+
+
+def test_a_chore_due_one_day_a_week_costs_a_seventh_of_a_daily_one(
+    make_pricing_coordinator,
+) -> None:
+    """The frequency factor, at its simplest."""
+    weekly = make_pricing_coordinator(
+        children=[child("A")],
+        chores=[chore(70, due_days=["monday"])],
+    )
+    daily = make_pricing_coordinator(children=[child("A")], chores=[chore(70)])
+
+    assert weekly.get_child_daily_points(reward()) == {"A": 10.0}, (
+        "70 points on Mondays only is 4 days of the 28-day window, so 70 x 4/28 "
+        "= 10.0 pts/day - a seventh of what the same chore earns daily"
+    )
+    assert daily.calculate_dynamic_reward_costs(reward(days_to_goal=7)) == {"A": 490}
+    assert weekly.calculate_dynamic_reward_costs(reward(days_to_goal=7)) == {"A": 70}, (
+        "the same reward must cost 70 rather than 490 when the chore that pays "
+        "for it only comes round on Mondays"
+    )
+
+
+def test_a_mon_wed_fri_chore_is_not_priced_as_though_it_ran_every_day(
+    make_pricing_coordinator,
+) -> None:
+    """The trap this factor exists to close.
+
+    Before it, a parent who set up a Mon/Wed/Fri rotation got a reward priced
+    off seven days of earnings the child could never make. The goal moved
+    seven-thirds further away and nothing in the UI said why.
+    """
+    coordinator = make_pricing_coordinator(
+        children=[child("A")],
+        chores=[chore(70, due_days=["monday", "wednesday", "friday"])],
+    )
+
+    assert coordinator.get_child_daily_points(reward()) == {"A": 30.0}, (
+        "three days a week is 12 of the 28-day window, so 70 x 12/28 = 30.0 "
+        "pts/day, not the 70.0 an unscheduled chore would report"
+    )
+    assert coordinator.calculate_dynamic_reward_costs(reward(days_to_goal=7)) == {"A": 210}, (
+        "so a week's goal is 210 points and not the unreachable 490"
+    )
+
+
+def test_an_occurrence_rotation_splits_a_chores_days_between_the_children_on_it(
+    make_pricing_coordinator,
+) -> None:
+    """Taking turns halves what each child can expect to earn from a chore.
+
+    Reading the frequency off `due_days` instead of resolving it per child
+    would price both children as though they did the chore every weekend,
+    which is exactly double what either of them can actually earn.
+    """
+    taking_turns = make_pricing_coordinator(
+        children=[child("A"), child("B")],
+        chores=[
+            chore(
+                70,
+                assigned_to=["A", "B"],
+                due_days=["saturday", "sunday"],
+                rotation="occurrence",
+                rotation_order=["A", "B"],
+            )
+        ],
+    )
+    both_every_time = make_pricing_coordinator(
+        children=[child("A"), child("B")],
+        chores=[chore(70, assigned_to=["A", "B"], due_days=["saturday", "sunday"])],
+    )
+
+    assert both_every_time.get_child_daily_points(reward()) == {"A": 20.0, "B": 20.0}, (
+        "with no rotation both children are on all 8 weekend days: 70 x 8/28 = 20.0"
+    )
+    assert taking_turns.get_child_daily_points(reward()) == {"A": 10.0, "B": 10.0}, (
+        "alternating gives each child 4 of those 8 days - 70 x 4/28 = 10.0 - "
+        "however the anchor happens to line up with today, because eight "
+        "occurrences shared between two children always divides evenly"
+    )
+
+
+def test_a_weekday_override_reprices_only_the_days_it_names(
+    make_pricing_coordinator,
+) -> None:
+    """An override is part of the frequency, not an exception to it."""
+    coordinator = make_pricing_coordinator(
+        children=[child("A"), child("B")],
+        chores=[chore(28, assigned_to=["A"], day_overrides={"monday": ["B"]})],
+    )
+
+    assert coordinator.get_child_daily_points(reward()) == {"A": 24.0, "B": 4.0}, (
+        "A keeps 24 of the window's 28 days at 28 x 24/28 = 24.0 pts/day, and "
+        "the four Mondays hand B 28 x 4/28 = 4.0 - counting days off `due_days` "
+        f"would have missed both. Got {coordinator.get_child_daily_points(reward())}"
+    )
+
+
+def test_a_chore_that_never_comes_round_earns_nothing_rather_than_dividing_by_zero(
+    make_pricing_coordinator,
+) -> None:
+    """A chore due on no day contributes nothing and must not raise.
+
+    `["funday"]` is a non-empty `due_days` naming no real weekday, which is
+    what a hand-written service call or a typo in YAML produces. The child is
+    never scheduled, so they earn nothing from it and fall back to the reward's
+    manual cost - the same place a child with no chores at all lands.
+    """
+    coordinator = make_pricing_coordinator(
+        children=[child("A")],
+        chores=[chore(50, assigned_to=["A"], due_days=["funday"])],
+    )
+
+    assert coordinator.get_child_daily_points(reward()) == {"A": 0.0}, (
+        "the child is on a chore, so they appear in the rates - at 0.0, the "
+        "same rate a chore with a completion percentage of 0 already reports. "
+        "Reaching this at all means the zero-day guard held instead of dividing"
+    )
+    assert coordinator.calculate_dynamic_reward_costs(reward(cost=42, days_to_goal=10)) == {
+        "A": 42
+    }, (
+        "and 0.0 is not > 0, so pricing gives up and charges the reward's "
+        "manually entered cost of 42 - the existing behaviour for a child who "
+        "earns nothing, reached by a new route"
     )
 
 
