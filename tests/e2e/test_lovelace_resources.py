@@ -49,6 +49,7 @@ CARDS = (
     "choremander-reorder-card.js",
     "choremander-activity-card.js",
     "choremander-streak-card.js",
+    "choremander-schedule-card.js",
 )
 
 pytestmark = pytest.mark.e2e

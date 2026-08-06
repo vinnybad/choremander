@@ -114,7 +114,7 @@ The easiest way to add Choremander cards:
 4. The card will show a configuration interface - enter the entity that card reads (see below)
 5. Fill in any additional options (child selection, time of day, etc.) and save
 
-Most cards read `sensor.choremander_overview`. Three read their own sensor
+Most cards read `sensor.choremander_overview`. Four read their own sensor
 instead, because the data they need is too large to carry on the overview one:
 
 | Card | Entity |
@@ -122,6 +122,7 @@ instead, because the data they need is too large to carry on the overview one:
 | Approvals Card | `sensor.pending_approvals` |
 | Activity Card | `sensor.choremander_activity` |
 | Streak Card | `sensor.choremander_streaks` |
+| Schedule Card | `sensor.choremander_schedule` |
 | Everything else | `sensor.choremander_overview` |
 
 Picking the wrong one is not silent — the card says which entity it reads rather
@@ -167,6 +168,8 @@ lovelace:
       type: module
     - url: /choremander/choremander-streak-card.js
       type: module
+    - url: /choremander/choremander-schedule-card.js
+      type: module
 ```
 
 ### Card Index
@@ -180,6 +183,7 @@ lovelace:
 | [Points Card](#points-card) | Parents | Manually add/remove points |
 | [Reorder Card](#reorder-card) | Parents | Organize chore display order per child |
 | [Activity Card](#activity-card) | Parents | Timeline of everything that happened |
+| [Schedule Card](#schedule-card) | Parents | Which days each chore falls on and whose turn it is |
 
 > **Tip:** Create separate dashboards - one for kids (Child + Rewards + Streak) and one for parents (Approvals + Points + Activity).
 
@@ -404,11 +408,58 @@ density: compact
 
 </details>
 
+#### Schedule Card
+
+A week of the family rota: one row per scheduled chore, one column per day, and
+whoever is on it in each cell. Arrows page between this week and next, which are
+the two weeks the integration resolves.
+
+Whose turn it is is worked out by the integration from the chore's rule and the
+date, so the card never has to guess - and asking twice always gives the same
+answer.
+
+Click a cell to change who is on that chore, and pick whether it applies to just
+that date or to every one of that weekday - the same choice a calendar asks when
+you edit a repeating event. Click a chore's name to change the days it falls on
+and how the children take turns. A day that does not repeat the way the rest of
+the chore's week does is marked, so an exception stays visibly an exception.
+
+Chores with no rule at all are on every day, for whoever they are assigned to -
+which is how every chore behaved before schedules existed. They are not in the
+grid; the picker underneath it is how you give one days of its own.
+
+**Visual Editor:** Add `custom:choremander-schedule-card` and pick the schedule
+entity. The names come from `sensor.choremander_overview`, which is also where
+the chores that are not on a schedule yet are read from.
+
+<details>
+<summary>YAML Example</summary>
+
+```yaml
+type: custom:choremander-schedule-card
+entity: sensor.choremander_schedule
+chores_entity: sensor.choremander_overview
+title: Weekly Schedule
+```
+</details>
+
+<details>
+<summary>Options</summary>
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `entity` | required | The `sensor.choremander_schedule` entity |
+| `chores_entity` | `sensor.choremander_overview` | Where chore and child names come from, and the chores not yet scheduled |
+| `title` | `Weekly Schedule` | Header text |
+
+</details>
+
 ---
 
 > **Note:** Most cards read the `sensor.choremander_overview` entity. The Activity
-> Card reads `sensor.choremander_activity` and the Streak Card reads
-> `sensor.choremander_streaks` - both are created for you. Child-specific cards
+> Card reads `sensor.choremander_activity`, the Streak Card reads
+> `sensor.choremander_streaks` and the Schedule Card reads
+> `sensor.choremander_schedule` - all are created for you. Child-specific cards
 > also need a child selection.
 
 ---

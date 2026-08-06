@@ -243,7 +243,7 @@ def test_get_version_propagates_a_permission_error() -> None:
 async def test_register_cards_creates_one_versioned_resource_per_card(
     hass: HomeAssistant,
 ) -> None:
-    """All seven cards are registered as versioned ES modules, in `CARDS` order."""
+    """All eight cards are registered as versioned ES modules, in `CARDS` order."""
     resources = FakeResources()
     hass.data["lovelace"] = FakeLovelace(resources)
 
@@ -251,7 +251,7 @@ async def test_register_cards_creates_one_versioned_resource_per_card(
 
     assert resources.created == [
         {"url": _versioned(card), "res_type": "module"} for card in CARDS
-    ], "the seven cards should be created in CARDS order with a ?v= cache buster"
+    ], "the eight cards should be created in CARDS order with a ?v= cache buster"
     assert resources.updated == [], "nothing pre-existed, so nothing should be updated"
 
 
@@ -291,7 +291,7 @@ async def test_register_cards_updates_only_the_resources_whose_version_is_stale(
 # empty, and `async_items()` reports nothing until `async_load()` runs. Writing
 # to it while unloaded makes the debounced `_data_to_save()` serialise only the
 # rows Choremander just created - silently truncating `.storage/
-# lovelace_resources` to seven entries and erasing every other custom card.
+# lovelace_resources` to Choremander's own cards and erasing every other one.
 # ---------------------------------------------------------------------------
 
 THIRD_PARTY_RESOURCES: Final = [
@@ -486,7 +486,7 @@ async def test_a_restart_neither_duplicates_nor_drops_resources(
 
     # Assert the third-party rows explicitly. Comparing the two boots against
     # each other is not enough on its own: with the bug present *both* boots
-    # truncate to the same seven cards, so the equality below holds happily
+    # truncate to the same eight cards, so the equality below holds happily
     # while the user's resources are gone. This loop is what actually fails.
     for item in seeded_lovelace_resources:
         assert item["url"] in after_second_boot, (
@@ -618,7 +618,7 @@ async def test_real_setup_registers_all_five_cards_with_lovelace(
 
     registered = [item for item in resources.async_items() if item["url"].startswith(URL_BASE)]
     assert [item["url"] for item in registered] == [_versioned(card) for card in CARDS], (
-        "all seven cards should be present, versioned, and in CARDS order"
+        "all eight cards should be present, versioned, and in CARDS order"
     )
     assert {item["type"] for item in registered} == {"module"}, (
         "cards are ES modules; Lovelace stores that under the 'type' key"
