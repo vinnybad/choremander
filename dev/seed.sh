@@ -32,6 +32,16 @@ fi
 
 docker compose -f docker-compose.dev.yml stop homeassistant >/dev/null 2>&1 || true
 
+# `stop` is synchronous, so nothing rewrites .storage after it returns - but its
+# failure was being swallowed, and everything below would then be racing a live
+# Home Assistant that rewrites the lot on its eventual shutdown. Confirm rather
+# than assume.
+if docker compose -f docker-compose.dev.yml ps --status running 2>/dev/null | grep -q homeassistant; then
+  echo "Home Assistant is still running; refusing to touch dev/config underneath it." >&2
+  echo "Stop it with './dev/stop.sh' and try again." >&2
+  exit 1
+fi
+
 # On Linux the files Home Assistant just rewrote on shutdown belong to root, and
 # the copy below would fail on them. See dev/take-ownership.sh.
 "$SCRIPT_DIR/take-ownership.sh"

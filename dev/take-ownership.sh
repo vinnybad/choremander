@@ -22,7 +22,11 @@ CONFIG="$SCRIPT_DIR/config"
 # Fast path: skip the container entirely when nothing in the tree is foreign.
 # This is the normal case on macOS, and on Linux before the container's first
 # run, so the common path stays as cheap as it was before.
-if [ -z "$(find "$CONFIG" ! -user "$(id -u)" -print -quit 2>/dev/null)" ]; then
+#
+# A `find` that cannot walk the tree is itself a symptom of the ownership this
+# script exists to fix, so its failure falls through to the reclaim rather than
+# being read as "nothing to do".
+if foreign="$(find "$CONFIG" ! -user "$(id -u)" -print -quit 2>/dev/null)" && [ -z "$foreign" ]; then
   exit 0
 fi
 

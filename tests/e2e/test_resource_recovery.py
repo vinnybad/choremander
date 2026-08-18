@@ -23,6 +23,7 @@ from typing import Any
 
 import pytest
 
+from .environment import environment_unavailable
 from .ha_client import HAClient, HomeAssistantError
 from .test_lovelace_resources import (
     RESOURCE_STORE,
@@ -42,7 +43,7 @@ pytestmark = pytest.mark.e2e
 
 def _read_store_file() -> dict[str, Any]:
     if not RESOURCE_STORE.exists():
-        pytest.skip(f"{RESOURCE_STORE} does not exist; run `./dev/start.sh` first.")
+        environment_unavailable(f"{RESOURCE_STORE} does not exist; run `./dev/start.sh` first.")
     return json.loads(RESOURCE_STORE.read_text())
 
 
@@ -93,7 +94,7 @@ def test_a_deleted_resource_is_detected_and_restored_by_the_repair(
 
     container = _container_publishing(ha.base_url)
     if container is None:
-        pytest.skip(f"No running container publishes the port of {ha.base_url}.")
+        environment_unavailable(f"No running container publishes the port of {ha.base_url}.")
 
     original = _read_store_file()
     assert THIRD_PARTY_URL in _store_urls(), "precondition: resource is registered"
@@ -158,9 +159,17 @@ def test_a_deleted_resource_is_detected_and_restored_by_the_repair(
         # a failure anywhere above would leave that unrelated test failing until
         # somebody thought to run `dev/seed.sh`.
         if THIRD_PARTY_URL not in _store_urls():
-            was_running = _is_up(ha)
-            if was_running:
-                subprocess.run(["docker", "stop", container], capture_output=True, timeout=300)
+            # Stop unconditionally instead of trusting `_is_up`: an instance
+            # that is running but not answering yet - the likely state if the
+            # test above timed out waiting for it on a slow runner - reads as
+            # stopped, and the store written underneath it would be overwritten
+            # by its next save. `docker stop` on an already-stopped container
+            # succeeds, so this costs nothing when it really is down.
+            stopped = _docker("stop", container)
+            assert stopped.returncode == 0, (
+                f"could not stop {container} to put the resource store back; it is "
+                f"still missing {THIRD_PARTY_URL}:\n{stopped.stdout}\n{stopped.stderr}"
+            )
             _write_store(original)
 
         if not _is_up(ha):

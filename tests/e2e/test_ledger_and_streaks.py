@@ -21,6 +21,7 @@ import subprocess
 
 import pytest
 
+from .environment import environment_unavailable
 from .ha_client import HAClient
 
 # `e2e` is declared at module level rather than added during collection so that
@@ -43,11 +44,13 @@ def fresh_ledger() -> None:
     """
     seed = REPO_ROOT / "dev" / "seed.sh"
     if not seed.exists():
-        pytest.skip(f"{seed} is missing; cannot reach a known starting state.")
+        environment_unavailable(f"{seed} is missing; cannot reach a known starting state.")
 
     result = subprocess.run([str(seed)], cwd=REPO_ROOT, capture_output=True, text=True, timeout=300)
     if result.returncode != 0:
-        pytest.skip(f"{seed} exited {result.returncode}:\n{result.stdout}\n{result.stderr}")
+        environment_unavailable(
+            f"{seed} exited {result.returncode}:\n{result.stdout}\n{result.stderr}"
+        )
 
 
 ACTIVITY = "sensor.choremander_activity"

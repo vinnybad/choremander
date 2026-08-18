@@ -10,27 +10,14 @@ from collections.abc import Generator
 import os
 from pathlib import Path
 import subprocess
-from typing import NoReturn
 
 import pytest
 import pytest_socket
 
+from .environment import environment_unavailable
 from .ha_client import HAClient, HomeAssistantError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-
-
-def _environment_unavailable(reason: str) -> NoReturn:
-    """Skip on a workstation, fail in CI.
-
-    Locally, `pytest -m e2e` without a container up should say so and get out of
-    the way. In CI the container is always meant to be running, so a skip there
-    is a green run that tested nothing - which is exactly how this suite spent
-    weeks reporting success while silently skipping all of its tests.
-    """
-    if os.environ.get("CI"):
-        pytest.fail(reason, pytrace=False)
-    pytest.skip(reason)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -49,11 +36,11 @@ def seeded_environment() -> None:
 
     seed = REPO_ROOT / "dev" / "seed.sh"
     if not seed.exists():
-        _environment_unavailable(f"{seed} is missing; cannot guarantee a clean starting state.")
+        environment_unavailable(f"{seed} is missing; cannot guarantee a clean starting state.")
 
     result = subprocess.run([str(seed)], cwd=REPO_ROOT, capture_output=True, text=True, timeout=300)
     if result.returncode != 0:
-        _environment_unavailable(
+        environment_unavailable(
             "Could not reset the dev environment - is it running?\n"
             f"{seed} exited {result.returncode}:\n{result.stdout}\n{result.stderr}"
         )
@@ -88,10 +75,10 @@ def ha(allow_local_sockets: None) -> HAClient:
     try:
         client = HAClient.from_token_file()
     except HomeAssistantError as err:
-        _environment_unavailable(str(err))
+        environment_unavailable(str(err))
 
     if not client.is_up():
-        _environment_unavailable(
+        environment_unavailable(
             f"Home Assistant is not responding at {client.base_url}. Run `./dev/start.sh` first."
         )
 

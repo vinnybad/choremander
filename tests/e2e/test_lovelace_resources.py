@@ -31,6 +31,7 @@ import urllib.parse
 
 import pytest
 
+from .environment import environment_unavailable
 from .ha_client import HAClient
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -75,7 +76,7 @@ pytestmark = pytest.mark.e2e
 def _read_store() -> list[dict[str, Any]]:
     """The resource rows Home Assistant has actually written to disk."""
     if not RESOURCE_STORE.exists():
-        pytest.skip(f"{RESOURCE_STORE} does not exist; run `./dev/start.sh` first.")
+        environment_unavailable(f"{RESOURCE_STORE} does not exist; run `./dev/start.sh` first.")
     return json.loads(RESOURCE_STORE.read_text())["data"]["items"]
 
 
@@ -146,6 +147,14 @@ def _container_publishing(base_url: str) -> str | None:
         text=True,
         timeout=60,
     )
+    # A daemon that is not running, or that refuses the socket, exits non-zero
+    # with nothing on stdout - indistinguishable from "no such container" if the
+    # status is ignored, and it would read as a tidy skip rather than a broken
+    # environment.
+    if result.returncode != 0:
+        environment_unavailable(
+            f"`docker ps` exited {result.returncode}:\n{result.stdout}\n{result.stderr}"
+        )
     names = result.stdout.split()
     return names[0] if names else None
 
@@ -173,11 +182,11 @@ def test_a_restart_preserves_every_resource(ha: HAClient) -> None:
 
     container = _container_publishing(ha.base_url)
     if container is None:
-        pytest.skip(f"No running container publishes the port of {ha.base_url}.")
+        environment_unavailable(f"No running container publishes the port of {ha.base_url}.")
 
     result = _docker("restart", container)
     if result.returncode != 0:
-        pytest.skip(f"Could not restart {container}:\n{result.stdout}\n{result.stderr}")
+        environment_unavailable(f"Could not restart {container}:\n{result.stdout}\n{result.stderr}")
     _wait_until_up(ha, container)
 
     # Stop it again before reading. Polling for a predicate would be useless
@@ -188,7 +197,7 @@ def test_a_restart_preserves_every_resource(ha: HAClient) -> None:
     # truncating write observable rather than a race.
     stopped = _docker("stop", container)
     if stopped.returncode != 0:
-        pytest.skip(f"Could not stop {container}:\n{stopped.stdout}\n{stopped.stderr}")
+        environment_unavailable(f"Could not stop {container}:\n{stopped.stdout}\n{stopped.stderr}")
 
     try:
         after = _read_store()
