@@ -31,6 +31,7 @@ from .test_lovelace_resources import (
     _docker,
     _is_up,
     _wait_until_up,
+    _write_store,
 )
 
 ISSUE_ID = "deleted_lovelace_resources"
@@ -105,7 +106,7 @@ def test_a_deleted_resource_is_detected_and_restored_by_the_repair(
         damaged["data"]["items"] = [
             item for item in damaged["data"]["items"] if item["url"] != THIRD_PARTY_URL
         ]
-        RESOURCE_STORE.write_text(json.dumps(damaged, indent=2))
+        _write_store(damaged)
         assert THIRD_PARTY_URL not in _store_urls(), "the row should now be gone"
 
         assert _docker("start", container).returncode == 0
@@ -160,7 +161,7 @@ def test_a_deleted_resource_is_detected_and_restored_by_the_repair(
             was_running = _is_up(ha)
             if was_running:
                 subprocess.run(["docker", "stop", container], capture_output=True, timeout=300)
-            RESOURCE_STORE.write_text(json.dumps(original, indent=2))
+            _write_store(original)
 
         if not _is_up(ha):
             subprocess.run(["docker", "start", container], capture_output=True, timeout=300)

@@ -35,6 +35,23 @@ from .ha_client import HAClient
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESOURCE_STORE = REPO_ROOT / "dev" / "config" / ".storage" / "lovelace_resources"
+TAKE_OWNERSHIP = REPO_ROOT / "dev" / "take-ownership.sh"
+
+
+def _write_store(payload: dict[str, Any]) -> None:
+    """Replace the resource store on disk, from outside the container.
+
+    Home Assistant writes this file as root, and on Linux a bind mount keeps
+    that ownership on the host, so a plain write fails for whoever is running
+    the tests. The reclaim `dev/seed.sh` uses makes the file ours again first.
+
+    Only call this with the container stopped: Home Assistant holds the store in
+    memory and would write over anything put underneath it.
+    """
+    subprocess.run([str(TAKE_OWNERSHIP)], check=True, capture_output=True, timeout=300)
+    RESOURCE_STORE.write_text(json.dumps(payload, indent=2))
+
+
 THIRD_PARTY_URL = "/local/third-party-card.js"
 
 # Spelled out rather than imported from the integration: nothing in this
