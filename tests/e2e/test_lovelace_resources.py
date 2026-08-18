@@ -32,7 +32,7 @@ import urllib.parse
 import pytest
 
 from .environment import environment_unavailable
-from .ha_client import HAClient
+from .ha_client import HAClient, HomeAssistantError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESOURCE_STORE = REPO_ROOT / "dev" / "config" / ".storage" / "lovelace_resources"
@@ -164,10 +164,32 @@ def _docker(*args: str, timeout: float = 300) -> subprocess.CompletedProcess[str
 
 
 def _wait_until_up(ha: HAClient, container: str) -> None:
+    """Wait for Home Assistant, and then for Choremander inside it.
+
+    `/api/` starts answering well before the integration has finished setting
+    up, so waiting only for that hands whatever runs next a Home Assistant with
+    no `sensor.choremander_overview` in it. The tests that restart the container
+    are not the ones that fail: the next module's fixture reads the overview,
+    gets a 404, and errors - which is exactly how this presented, passing on one
+    runner and failing on a slower one.
+    """
     deadline = time.monotonic() + 180
     while time.monotonic() < deadline and not _is_up(ha):
         time.sleep(2)
     assert _is_up(ha), f"{container} did not come back up"
+
+    while time.monotonic() < deadline:
+        try:
+            ha.state(HAClient.OVERVIEW)
+            return
+        except HomeAssistantError:
+            # 404 until the config entry has finished setting up its entities.
+            time.sleep(2)
+
+    raise AssertionError(
+        f"{container} answered, but {HAClient.OVERVIEW} never appeared. "
+        "Choremander did not finish setting up after the restart."
+    )
 
 
 def test_a_restart_preserves_every_resource(ha: HAClient) -> None:
