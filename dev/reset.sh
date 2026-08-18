@@ -11,6 +11,10 @@ cd "$PROJECT_DIR"
 echo "Stopping any running containers..."
 docker compose -f docker-compose.dev.yml down 2>/dev/null || true
 
+# The container wrote most of what is about to be deleted, and on Linux it
+# wrote it as root. See dev/take-ownership.sh.
+"$SCRIPT_DIR/take-ownership.sh"
+
 echo "Removing generated files (keeping seeded config)..."
 rm -rf dev/config/.storage/auth
 rm -rf dev/config/.storage/auth_provider.homeassistant

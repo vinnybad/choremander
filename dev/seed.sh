@@ -32,6 +32,10 @@ fi
 
 docker compose -f docker-compose.dev.yml stop homeassistant >/dev/null 2>&1 || true
 
+# On Linux the files Home Assistant just rewrote on shutdown belong to root, and
+# the copy below would fail on them. See dev/take-ownership.sh.
+"$SCRIPT_DIR/take-ownership.sh"
+
 mkdir -p "$STORAGE"
 for fixture in "$FIXTURES"/*; do
   name="$(basename "$fixture")"
