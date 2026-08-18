@@ -32,7 +32,7 @@ from custom_components.choremander.frontend import (
     async_register_frontend,
 )
 
-MANIFEST_VERSION = "1.1.1"
+MANIFEST_VERSION = "1.1.2"
 
 
 class FakeResources:
