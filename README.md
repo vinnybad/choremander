@@ -219,6 +219,7 @@ child_id: a8c8376a
 time_category: morning  # Optional: morning, afternoon, evening, night, anytime
 title: My Chores        # Optional
 density: compact        # Optional: default, cozy, compact
+sort_by: points         # Optional: default, points, points_desc
 show_header: false      # Optional: hide the avatar / name / balance strip
 schedule_entity: sensor.choremander_schedule  # Optional: whose turn it is today
 ```
@@ -271,6 +272,7 @@ What that adds up to on a phone. Same dashboard, one screen:
 | Option | Values | Default | What it does |
 |---|---|---|---|
 | `density` | `default`, `cozy`, `compact` | `default` | How much space each chore takes. `compact` fits roughly twice as many chores on a phone screen. |
+| `sort_by` | `default`, `points`, `points_desc` | `default` | Sort today's chores by points instead of the card order. `points` puts the quick little ones first, `points_desc` the big ones. Chores with equal points keep their existing order. |
 | `show_header` | bool | `true` | The avatar, name and star balance across the top. Turn off if you show the balance elsewhere. |
 | `show_avatar` | bool | `true` | Just the round avatar. |
 | `show_title` | bool | `true` | The "Morning Chores" heading. |

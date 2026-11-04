@@ -1730,6 +1730,17 @@ class ChoremanderChildCard extends LitElement {
       filteredChores.map(c => c.name)
     );
 
+    // Optional points sorting (opt-in via config.sort_by). Takes precedence
+    // over the child's manual chore order. Array.prototype.sort is stable,
+    // so chores with equal points keep their existing order.
+    const sortBy = this.config.sort_by || "default";
+    if (sortBy === "points" || sortBy === "points_desc") {
+      const direction = sortBy === "points_desc" ? -1 : 1;
+      return filteredChores.sort(
+        (a, b) => ((Number(a.points) || 0) - (Number(b.points) || 0)) * direction
+      );
+    }
+
     // If no custom order is set, return filtered chores as-is
     if (choreOrder.length === 0) {
       return filteredChores;
@@ -2551,6 +2562,22 @@ class ChoremanderChildCardEditor extends LitElement {
         <small>How much space each chore takes up. Taps stay finger-sized at every setting.</small>
       </div>
 
+      <div class="form-group">
+        <label>Sort order</label>
+        <select @change="${this._sortByChanged}">
+          <option value="default" ?selected="${(this.config.sort_by || "default") === "default"}">
+            Default (card order)
+          </option>
+          <option value="points" ?selected="${this.config.sort_by === "points"}">
+            Points ascending
+          </option>
+          <option value="points_desc" ?selected="${this.config.sort_by === "points_desc"}">
+            Points descending
+          </option>
+        </select>
+        <small>Optional: sort today's chores by points instead of the card order.</small>
+      </div>
+
       ${this._renderToggle(
         "show_header",
         "Show header",
@@ -2609,6 +2636,10 @@ class ChoremanderChildCardEditor extends LitElement {
     this._updateConfig("density", e.target.value);
   }
 
+  _sortByChanged(e) {
+    this._updateConfig("sort_by", e.target.value);
+  }
+
   _entityChanged(e) {
     this._updateConfig("entity", e.target.value);
   }
@@ -2631,6 +2662,7 @@ class ChoremanderChildCardEditor extends LitElement {
    */
   static LAYOUT_DEFAULTS = {
     density: "default",
+    sort_by: "default",
     show_header: true,
     show_avatar: true,
     show_numbers: true,
